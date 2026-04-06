@@ -1,4 +1,4 @@
-# Vehicle Service Management Platform (Backend)
+# Vehicle Service Management Platform 
 
 This is the backend server for the **Vehicle Service Management Platform**, built entirely using the Node.js / Express.js MERN stack. It handles RESTful APIs, secure authentication, database modeling using Mongoose, and multipart file uploads for vehicles and documents.
 

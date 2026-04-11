@@ -1,1 +1,120 @@
-/* App-specific styles can go here if needed, but we are using Tailwind CSS for most styling. */
+@import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap');
+
+:root {
+  --primary: #CC0000;
+  --primary-glow: rgba(204, 0, 0, 0.4);
+  --bg: #000000;
+  --surface: #0a0a0a;
+  --border: rgba(255, 255, 255, 0.1);
+  --text-muted: rgba(255, 255, 255, 0.6);
+  --text-bright: #ffffff;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  background: var(--bg);
+  color: var(--text-bright);
+  font-family: 'Inter', sans-serif;
+  overflow: hidden;
+  height: 100vh;
+  width: 100vw;
+}
+
+.oswald {
+  font-family: 'Oswald', sans-serif;
+  text-transform: uppercase;
+}
+
+/* Animations */
+@keyframes spin { 100% { transform: rotate(360deg); } }
+@keyframes marquee { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+@keyframes marquee-reverse { 0% { transform: translateX(-50%); } 100% { transform: translateX(0); } }
+@keyframes float { 0%, 100% { transform: translateY(0px) scale(1); } 50% { transform: translateY(-20px) scale(1.02); } }
+@keyframes slideUp { from { transform: translateY(30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+@keyframes shimmer { 0% { background-position: -200% center; } 100% { background-position: 200% center; } }
+@keyframes pulseGlow { 0%, 100% { text-shadow: 0 0 15px var(--primary-glow); } 50% { text-shadow: 0 0 30px #ff4d4d; } }
+
+/* Buttons */
+.angled-button {
+  border-radius: 50px;
+  background: var(--primary);
+  color: #fff;
+  font-family: 'Oswald', sans-serif;
+  text-transform: uppercase;
+  border: none;
+  cursor: pointer;
+  transition: all 0.3s;
+  position: relative;
+  display: inline-block;
+  padding: 14px 32px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+}
+.angled-button:hover {
+  background: #ff3333;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px var(--primary-glow);
+}
+
+.ghost-button {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 50px;
+  color: #fff;
+  padding: 12px 28px;
+  font-family: 'Oswald', sans-serif;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.3s;
+  letter-spacing: 1px;
+}
+.ghost-button:hover {
+  border-color: var(--primary);
+  background: rgba(255, 26, 26, 0.05);
+}
+
+/* Background effects */
+.grid-overlay {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  pointer-events: none;
+  background-image: 
+      linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+  background-size: 80px 80px;
+  opacity: 0.6;
+  z-index: 0;
+}
+
+/* Auth Modal */
+.modal-overlay {
+  position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+  background: rgba(0,0,0,0.85); backdrop-filter: blur(10px);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 99999; opacity: 0; pointer-events: none; transition: opacity 0.4s ease;
+}
+.modal-overlay.active { opacity: 1; pointer-events: auto; }
+.modal-content {
+  display: flex; width: 900px; max-width: 95%; background: var(--bg);
+  border: 1px solid var(--border); transform: scale(0.95); transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+  box-shadow: 0 30px 80px rgba(0,0,0,1); border-radius: 4px; overflow: hidden;
+}
+.modal-overlay.active .modal-content { transform: scale(1); }
+
+.input-field {
+  width: 100%; padding: 16px 18px; background: #0a0a0a; border: 1px solid var(--border); 
+  color: #fff; outline: none; transition: all 0.3s; font-family: 'Barlow', sans-serif;
+  border-radius: 2px;
+}
+.input-field:focus { 
+  box-shadow: 0 0 15px var(--primary-glow); 
+  border-color: var(--primary); 
+}
+
+/* Scroll Hide */
+::-webkit-scrollbar { display: none; }

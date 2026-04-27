@@ -73,5 +73,5 @@ Using the local `nodemon` installation, start the development environment:
 npm run dev
 ```
 
-The server should successfully log database success, yielding:
+The server should successfully log database success, yielding
 **`Server running on port 5000`** and **`MongoDB Connected`**.

@@ -1,87 +1,162 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+
+const API = '/api';
+
+const LoadingSpinner = ({ label = 'Loading…' }) => (
+  <div className="loading-container"><div className="spinner" /><span>{label}</span></div>
+);
+
+const ROLE_STYLE = {
+  admin:      { bg: 'rgba(231,76,60,0.15)',   color: '#e74c3c' },
+  technician: { bg: 'rgba(52,152,219,0.15)',  color: '#3498db' },
+  customer:   { bg: 'rgba(255,255,255,0.07)', color: '#aaa' },
+};
 
 const AdminPanel = ({ user }) => {
-  const [metrics, setMetrics] = useState(null);
+  const [metrics, setMetrics]     = useState(null);
   const [usersList, setUsersList] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading]     = useState(true);
+  const [error, setError]         = useState('');
+  const [search, setSearch]       = useState('');
 
-  useEffect(() => {
+  const headers = { Authorization: `Bearer ${user.token}` };
+
+  const fetchAdminData = useCallback(async () => {
     if (user.role !== 'admin') return;
-    
-    const fetchAdminData = async () => {
-      try {
-        const headers = { Authorization: `Bearer ${user.token}` };
-        
-        const metricsRes = await fetch('http://localhost:5000/api/admin/metrics', { headers });
-        if (metricsRes.ok) setMetrics(await metricsRes.json());
-        
-        const usersRes = await fetch('http://localhost:5000/api/admin/users', { headers });
-        if (usersRes.ok) setUsersList(await usersRes.json());
+    setLoading(true); setError('');
+    try {
+      const [mR, uR] = await Promise.all([
+        fetch(`${API}/admin/metrics`, { headers }),
+        fetch(`${API}/admin/users`,   { headers }),
+      ]);
+      if (mR.ok) setMetrics(await mR.json());
+      else { const d = await mR.json(); throw new Error(d.message || 'Failed to load metrics'); }
+      if (uR.ok) setUsersList(await uR.json());
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [user.token, user.role]);
 
-      } catch (err) {
-        console.error("Admin fetch error", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchAdminData();
-  }, [user]);
+  useEffect(() => { fetchAdminData(); }, [fetchAdminData]);
 
   if (user.role !== 'admin') {
-    return <div style={{ color: 'red', marginTop: '50px' }}>Access Denied: Admin privileges required.</div>;
+    return (
+      <div className="empty-state">
+        <div style={{
+          display: 'inline-block', padding: '10px 18px', borderRadius: '4px',
+          background: 'rgba(231,76,60,0.12)', color: '#e74c3c',
+          fontWeight: 700, fontSize: '0.82rem', letterSpacing: '2px',
+          textTransform: 'uppercase', marginBottom: '14px', border: '1px solid rgba(231,76,60,0.25)',
+        }}>
+          RESTRICTED
+        </div>
+        <strong style={{ color: '#e74c3c', display: 'block', marginBottom: '8px' }}>Access Denied</strong>
+        <p>Administrator privileges required.</p>
+      </div>
+    );
   }
 
+  const METRIC_CARDS = [
+    { key: 'userCount',        label: 'Total Users',       icon: 'U', color: '#fff' },
+    { key: 'vehicleCount',     label: 'Total Vehicles',    icon: 'V', color: '#fff' },
+    { key: 'appointmentCount', label: 'Appointments',      icon: 'A', color: 'var(--primary)' },
+    { key: 'totalRevenue',     label: 'Revenue Collected', icon: 'R', color: '#2ecc71', prefix: '₹' },
+  ];
+
+  const filteredUsers = usersList.filter(u => {
+    const src = search.toLowerCase();
+    return u.name.toLowerCase().includes(src) || u.email.toLowerCase().includes(src) || u.role.includes(src);
+  });
+
   return (
-    <div style={{ animation: 'fade-in 0.5s ease-out' }}>
-      <h2 className="oswald" style={{ fontSize: '2.5rem', color: '#fff', marginBottom: '30px' }}>ADMIN CONTROL PANEL</h2>
-      
-      {loading ? <p>Loading system metrics...</p> : (
+    <div style={{ animation: 'fade-in 0.45s ease-out both' }}>
+      <h2 className="oswald" style={{ fontSize: '2rem', color: '#fff', marginBottom: '28px' }}>
+        ADMIN CONTROL PANEL
+      </h2>
+
+      {error && <div className="alert alert-error">{error}</div>}
+
+      {loading ? <LoadingSpinner label="Loading system metrics…" /> : (
         <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '40px' }}>
-            <div style={{ background: 'var(--surface)', padding: '25px', borderRadius: '4px', border: '1px solid var(--border)', textAlign: 'center' }}>
-              <div style={{ color: '#aaa', fontSize: '0.85rem', textTransform: 'uppercase', marginBottom: '10px' }}>Total Users</div>
-              <div style={{ fontSize: '2.5rem', color: '#fff', fontWeight: 700 }} className="oswald">{metrics?.userCount || 0}</div>
-            </div>
-            <div style={{ background: 'var(--surface)', padding: '25px', borderRadius: '4px', border: '1px solid var(--border)', textAlign: 'center' }}>
-              <div style={{ color: '#aaa', fontSize: '0.85rem', textTransform: 'uppercase', marginBottom: '10px' }}>Total Vehicles</div>
-              <div style={{ fontSize: '2.5rem', color: '#fff', fontWeight: 700 }} className="oswald">{metrics?.vehicleCount || 0}</div>
-            </div>
-            <div style={{ background: 'var(--surface)', padding: '25px', borderRadius: '4px', border: '1px solid var(--border)', textAlign: 'center' }}>
-              <div style={{ color: '#aaa', fontSize: '0.85rem', textTransform: 'uppercase', marginBottom: '10px' }}>Appointments</div>
-              <div style={{ fontSize: '2.5rem', color: 'var(--primary)', fontWeight: 700 }} className="oswald">{metrics?.appointmentCount || 0}</div>
-            </div>
-            <div style={{ background: 'var(--surface)', padding: '25px', borderRadius: '4px', border: '1px solid var(--border)', textAlign: 'center' }}>
-              <div style={{ color: '#aaa', fontSize: '0.85rem', textTransform: 'uppercase', marginBottom: '10px' }}>Total Revenue</div>
-              <div style={{ fontSize: '2.5rem', color: '#2ecc71', fontWeight: 700 }} className="oswald">${metrics?.totalRevenue || 0}</div>
+          {/* ── Metric Cards ── */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '18px', marginBottom: '40px' }}>
+            {METRIC_CARDS.map(({ key, label, icon, color, prefix = '' }) => (
+              <div key={key} className="hover-card" style={{
+                background: 'var(--surface)', padding: '24px 20px', borderRadius: '6px',
+                border: '1px solid var(--border)', textAlign: 'center',
+                animation: 'fade-in 0.4s ease-out both',
+              }}>
+                <div style={{
+                  width: '40px', height: '40px', margin: '0 auto 12px', borderRadius: '50%',
+                  background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: '1.2rem', fontWeight: 700, color: 'var(--primary)'
+                }}>{icon}</div>
+                <div style={{ color: '#888', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '8px' }}>{label}</div>
+                <div className="oswald" style={{ fontSize: '2.2rem', color, fontWeight: 700 }}>
+                  {prefix}{typeof metrics?.[key] === 'number' ? metrics[key].toLocaleString() : '—'}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* ── User Directory ── */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+            <h3 className="oswald" style={{ fontSize: '1.6rem', color: '#fff' }}>USER DIRECTORY</h3>
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+              <span style={{ color: '#555', fontSize: '0.85rem' }}>{usersList.length} users total</span>
+              <input type="text" placeholder="Search users…" className="input-field"
+                style={{ width: '220px' }} value={search} onChange={e => setSearch(e.target.value)} />
             </div>
           </div>
 
-          <h3 className="oswald" style={{ fontSize: '1.8rem', color: '#fff', marginBottom: '20px' }}>USER DIRECTORY</h3>
-          <div style={{ overflowX: 'auto', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '4px' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-              <thead>
-                <tr style={{ background: 'rgba(255,255,255,0.05)', color: '#aaa', fontSize: '0.85rem', textTransform: 'uppercase' }}>
-                  <th style={{ padding: '20px' }}>Name</th>
-                  <th style={{ padding: '20px' }}>Email</th>
-                  <th style={{ padding: '20px' }}>Role</th>
-                  <th style={{ padding: '20px' }}>Created Date</th>
-                </tr>
-              </thead>
-              <tbody>
-                {usersList.map(u => (
-                  <tr key={u._id} style={{ borderTop: '1px solid var(--border)' }}>
-                    <td style={{ padding: '20px', color: '#fff' }}>{u.name}</td>
-                    <td style={{ padding: '20px' }}>{u.email}</td>
-                    <td style={{ padding: '20px' }}>
-                      <span style={{ padding: '5px 10px', borderRadius: '4px', fontSize: '0.75rem', textTransform: 'uppercase', background: u.role === 'admin' ? 'rgba(231, 76, 60, 0.2)' : u.role === 'technician' ? 'rgba(52, 152, 219, 0.2)' : 'rgba(255,255,255,0.1)', color: u.role === 'admin' ? '#e74c3c' : u.role === 'technician' ? '#3498db' : '#aaa' }}>
-                        {u.role}
-                      </span>
-                    </td>
-                    <td style={{ padding: '20px' }}>{new Date(u.createdAt).toLocaleDateString()}</td>
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '6px', overflow: 'hidden' }}>
+            <div style={{ overflowX: 'auto' }}>
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Role</th>
+                    <th>Joined</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {filteredUsers.length === 0 ? (
+                    <tr><td colSpan="5" style={{ textAlign: 'center', padding: '30px', color: '#555' }}>No users found</td></tr>
+                  ) : filteredUsers.map((u, i) => {
+                    const rs = ROLE_STYLE[u.role] || ROLE_STYLE.customer;
+                    return (
+                      <tr key={u._id} style={{ animation: `fade-in 0.3s ease-out ${i * 30}ms both` }}>
+                        <td style={{ color: '#444', fontSize: '0.8rem' }}>{i + 1}</td>
+                        <td style={{ color: '#fff', fontWeight: 500 }}>
+                          <div style={{
+                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                            width: '28px', height: '28px', borderRadius: '50%',
+                            background: rs.color + '22', color: rs.color, fontWeight: 700,
+                            fontSize: '0.85rem', marginRight: '10px',
+                          }}>{u.name.charAt(0).toUpperCase()}</div>
+                          {u.name}
+                        </td>
+                        <td>{u.email}</td>
+                        <td>
+                          <span style={{
+                            padding: '3px 10px', borderRadius: '12px', fontSize: '0.72rem',
+                            textTransform: 'uppercase', letterSpacing: '1px',
+                            background: rs.bg, color: rs.color, fontWeight: 600,
+                          }}>{u.role}</span>
+                        </td>
+                        <td style={{ color: '#555', fontSize: '0.82rem' }}>
+                          {new Date(u.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         </>
       )}

@@ -10,9 +10,7 @@ const Marquee = () => {
 
   return (
     <div style={{
-      position: 'absolute',
-      bottom: 0,
-      left: 0,
+      position: 'relative',
       width: '100vw',
       height: '120px',
       overflow: 'hidden',

@@ -1,249 +1,235 @@
 import React, { useState, useEffect } from 'react';
-import Vehicles from './Vehicles';
-import Appointments from './Appointments';
-import AdminPanel from './AdminPanel';
-import Invoices from './Invoices';
+import Vehicles      from './Vehicles';
+import Appointments  from './Appointments';
+import AdminPanel    from './AdminPanel';
+import Invoices      from './Invoices';
 import ServiceRecords from './ServiceRecords';
-import Technicians from './Technicians';
+import Technicians   from './Technicians';
 import Notifications from './Notifications';
 
-const Dashboard = ({ user }) => {
-  const [activeTab, setActiveTab] = useState('overview');
-  const [overviewData, setOverviewData] = useState({
-    vehiclesCount: 0,
-    appointmentsCount: 0,
-    pendingInvoices: 0,
-    unreadNotifications: 0
-  });
+/* ── nav icon map ── */
+const ICONS = {
+  overview:      'O',
+  vehicles:      'V',
+  appointments:  'A',
+  services:      'S',
+  invoices:      'I',
+  notifications: 'N',
+  technicians:   'T',
+  admin:         'A',
+};
 
-  // Fetch quick overview stats for the user (customer/tech perspective)
+const Dashboard = ({ user, onLogout }) => {
+  const [activeTab, setActiveTab]     = useState('overview');
+  const [overviewData, setOverviewData] = useState({
+    vehiclesCount: 0, appointmentsCount: 0, pendingInvoices: 0, unreadNotifications: 0,
+  });
+  const [unread, setUnread] = useState(0);
+  const [overviewLoading, setOverviewLoading] = useState(false);
+
+  /* Build nav list based on role */
+  const navItems = [
+    { id: 'overview',      label: 'Overview' },
+    { id: 'vehicles',      label: 'Vehicles' },
+    { id: 'appointments',  label: 'Appointments' },
+    { id: 'services',      label: 'Service Records' },
+    { id: 'invoices',      label: 'Invoices' },
+    { id: 'notifications', label: 'Notifications' },
+  ];
+  if (user.role !== 'customer') navItems.push({ id: 'technicians', label: 'Technicians' });
+  if (user.role === 'admin')    navItems.push({ id: 'admin',       label: 'Admin Panel' });
+
+  /* Fetch overview stats */
   useEffect(() => {
-    if (user.role === 'admin') return; 
-    
+    if (user.role === 'admin' || activeTab !== 'overview') return;
+
     const fetchOverview = async () => {
+      setOverviewLoading(true);
       try {
-        const headers = { Authorization: `Bearer ${user.token}` };
-        
-        // Parallel fetch for basic stats
-        const [vehRes, appRes, invRes, notifRes] = await Promise.all([
-          fetch('http://localhost:5000/api/vehicles', { headers }),
-          fetch('http://localhost:5000/api/appointments', { headers }),
-          fetch('http://localhost:5000/api/invoices', { headers }),
-          fetch('http://localhost:5000/api/notifications', { headers })
+        const h = { Authorization: `Bearer ${user.token}` };
+        const [vR, aR, iR, nR] = await Promise.all([
+          fetch('/api/vehicles',     { headers: h }),
+          fetch('/api/appointments', { headers: h }),
+          fetch('/api/invoices',     { headers: h }),
+          fetch('/api/notifications',{ headers: h }),
         ]);
-        
-        const vehData = vehRes.ok ? await vehRes.json() : { total: 0 };
-        const appData = appRes.ok ? await appRes.json() : [];
-        const invData = invRes.ok ? await invRes.json() : [];
-        const notifData = notifRes.ok ? await notifRes.json() : [];
-        
+        const vD = vR.ok ? await vR.json() : {};
+        const aD = aR.ok ? await aR.json() : [];
+        const iD = iR.ok ? await iR.json() : [];
+        const nD = nR.ok ? await nR.json() : [];
+        const unreadCount = Array.isArray(nD) ? nD.filter(n => !n.isRead).length : 0;
+        setUnread(unreadCount);
         setOverviewData({
-          vehiclesCount: vehData.vehicles ? vehData.vehicles.length : 0,
-          appointmentsCount: appData.length || 0,
-          pendingInvoices: invData.filter(i => i.paymentStatus === 'Pending').length || 0,
-          unreadNotifications: notifData.filter(n => !n.isRead).length || 0
+          vehiclesCount:        Array.isArray(vD.vehicles) ? vD.vehicles.length : 0,
+          appointmentsCount:    Array.isArray(aD) ? aD.length : 0,
+          pendingInvoices:      Array.isArray(iD) ? iD.filter(i => i.paymentStatus === 'Pending').length : 0,
+          unreadNotifications:  unreadCount,
         });
-      } catch(err) {
-        console.error(err);
+      } catch (err) {
+        console.error('Overview fetch error:', err);
+      } finally {
+        setOverviewLoading(false);
       }
     };
     fetchOverview();
+  }, [user, activeTab]);
+
+  /* Fetch unread count for sidebar badge (always) */
+  useEffect(() => {
+    if (user.role === 'admin') return;
+    fetch('/api/notifications', { headers: { Authorization: `Bearer ${user.token}` } })
+      .then(r => r.ok ? r.json() : [])
+      .then(d => setUnread(Array.isArray(d) ? d.filter(n => !n.isRead).length : 0))
+      .catch(() => {});
   }, [user]);
-
-  const navItems = [
-    { id: 'overview', label: 'Overview' },
-    { id: 'vehicles', label: 'Vehicles' },
-    { id: 'appointments', label: 'Appointments' },
-    { id: 'services', label: 'Service Records' },
-    { id: 'invoices', label: 'Invoices' },
-    { id: 'notifications', label: 'Notifications' }
-  ];
-
-  if (user.role !== 'customer') {
-    navItems.push({ id: 'technicians', label: 'Technicians' });
-  }
-
-  if (user.role === 'admin') {
-    navItems.push({ id: 'admin', label: 'Admin Panel' });
-  }
 
   const renderContent = () => {
     switch (activeTab) {
-      case 'vehicles':
-        return <Vehicles user={user} />;
-      case 'appointments':
-        return <Appointments user={user} />;
-      case 'services':
-        return <ServiceRecords user={user} />;
-      case 'invoices':
-        return <Invoices user={user} />;
-      case 'technicians':
-        return <Technicians user={user} />;
-      case 'notifications':
-        return <Notifications user={user} />;
-      case 'admin':
-        return <AdminPanel user={user} />;
+      case 'vehicles':      return <Vehicles      user={user} />;
+      case 'appointments':  return <Appointments  user={user} />;
+      case 'services':      return <ServiceRecords user={user} />;
+      case 'invoices':      return <Invoices      user={user} />;
+      case 'technicians':   return <Technicians   user={user} />;
+      case 'notifications': return <Notifications user={user} onReadUpdate={setUnread} />;
+      case 'admin':         return <AdminPanel    user={user} />;
       case 'overview':
       default:
         if (user.role === 'admin') {
           return (
-             <div style={{ textAlign: 'center', marginTop: '100px' }}>
-                <h3 className="oswald" style={{fontSize: '2rem'}}>Welcome to Admin Control</h3>
-                <p style={{color: '#888'}}>Please switch to the Admin Panel tab to view system metrics.</p>
-                <button onClick={() => setActiveTab('admin')} className="angled-button" style={{marginTop: '20px'}}>GO TO ADMIN PANEL</button>
-             </div>
+            <div style={{ textAlign: 'center', paddingTop: '80px', animation: 'fade-in 0.5s ease-out both' }}>
+              <div style={{ width: '64px', height: '64px', margin: '0 auto 20px', borderRadius: '50%', background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(255,255,255,0.1)' }}>
+                <span style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--primary)' }}>A</span>
+              </div>
+              <h3 className="oswald" style={{ fontSize: '2rem', marginBottom: '12px', letterSpacing: '1px' }}>Admin Control Centre</h3>
+              <p style={{ color: '#888', marginBottom: '28px', fontSize: '1.1rem' }}>Manage users, metrics and system data.</p>
+              <button onClick={() => setActiveTab('admin')} className="angled-button" style={{ padding: '12px 30px', fontSize: '1.05rem' }}>Go to Admin Panel</button>
+            </div>
           );
         }
-        
-        return (
-          <div style={{ animation: 'fade-in 0.5s ease-out' }}>
-            <h2 className="oswald" style={{ fontSize: '2.5rem', marginBottom: '30px', color: '#fff' }}>AT A GLANCE</h2>
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-              gap: '30px'
-            }}>
-              {/* Card 1 */}
-              <div onClick={() => setActiveTab('vehicles')} style={{
-                background: 'var(--surface)',
-                border: '1px solid var(--border)',
-                padding: '40px 30px',
-                borderRadius: '4px',
-                position: 'relative',
-                overflow: 'hidden',
-                boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
-                transition: 'transform 0.3s',
-                cursor: 'pointer'
-              }} onMouseOver={e=>e.currentTarget.style.transform='translateY(-5px)'} onMouseOut={e=>e.currentTarget.style.transform='translateY(0)'}>
-                <h3 className="oswald" style={{fontSize: '1.8rem', marginBottom: '15px'}}>MY VEHICLES</h3>
-                <div style={{fontSize: '3.5rem', fontWeight: 700, color: 'var(--primary)', marginBottom: '25px'}}>{overviewData.vehiclesCount}</div>
-                <button className="ghost-button" style={{width: '100%'}}>Manage Vehicles</button>
-                <div style={{position: 'absolute', top: '-40px', right: '-40px', background: 'var(--primary-glow)', width: '150px', height: '150px', borderRadius: '50%', filter: 'blur(50px)'}}></div>
-              </div>
-              
-              {/* Card 2 */}
-              <div onClick={() => setActiveTab('appointments')} style={{
-                background: 'var(--surface)',
-                border: '1px solid var(--border)',
-                padding: '40px 30px',
-                borderRadius: '4px',
-                position: 'relative',
-                overflow: 'hidden',
-                boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
-                transition: 'transform 0.3s',
-                cursor: 'pointer'
-              }} onMouseOver={e=>e.currentTarget.style.transform='translateY(-5px)'} onMouseOut={e=>e.currentTarget.style.transform='translateY(0)'}>
-                <h3 className="oswald" style={{fontSize: '1.8rem', marginBottom: '15px'}}>APPOINTMENTS</h3>
-                <div style={{fontSize: '3.5rem', fontWeight: 700, color: 'var(--primary)', marginBottom: '25px'}}>{overviewData.appointmentsCount}</div>
-                <button className="ghost-button" style={{width: '100%'}}>View Schedule</button>
-                <div style={{position: 'absolute', top: '-40px', right: '-40px', background: 'var(--primary-glow)', width: '150px', height: '150px', borderRadius: '50%', filter: 'blur(50px)'}}></div>
-              </div>
-
-              {/* Card 3 */}
-              <div onClick={() => setActiveTab('invoices')} style={{
-                background: 'var(--surface)',
-                border: '1px solid var(--border)',
-                padding: '40px 30px',
-                borderRadius: '4px',
-                position: 'relative',
-                overflow: 'hidden',
-                boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
-                transition: 'transform 0.3s',
-                cursor: 'pointer'
-              }} onMouseOver={e=>e.currentTarget.style.transform='translateY(-5px)'} onMouseOut={e=>e.currentTarget.style.transform='translateY(0)'}>
-                <h3 className="oswald" style={{fontSize: '1.8rem', marginBottom: '15px'}}>PENDING INVOICES</h3>
-                <div style={{fontSize: '3.5rem', fontWeight: 700, color: overviewData.pendingInvoices > 0 ? '#e74c3c' : 'var(--primary)', marginBottom: '25px'}}>{overviewData.pendingInvoices}</div>
-                <button className="ghost-button" style={{width: '100%'}}>View Invoices</button>
-                <div style={{position: 'absolute', top: '-40px', right: '-40px', background: overviewData.pendingInvoices > 0 ? 'rgba(231, 76, 60, 0.4)' : 'var(--primary-glow)', width: '150px', height: '150px', borderRadius: '50%', filter: 'blur(50px)'}}></div>
-              </div>
-
-              {/* Card 4 */}
-              <div onClick={() => setActiveTab('notifications')} style={{
-                background: 'var(--surface)',
-                border: '1px solid var(--border)',
-                padding: '40px 30px',
-                borderRadius: '4px',
-                position: 'relative',
-                overflow: 'hidden',
-                boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
-                transition: 'transform 0.3s',
-                cursor: 'pointer'
-              }} onMouseOver={e=>e.currentTarget.style.transform='translateY(-5px)'} onMouseOut={e=>e.currentTarget.style.transform='translateY(0)'}>
-                <h3 className="oswald" style={{fontSize: '1.8rem', marginBottom: '15px'}}>NEW NOTICES</h3>
-                <div style={{fontSize: '3.5rem', fontWeight: 700, color: overviewData.unreadNotifications > 0 ? '#f39c12' : 'var(--primary)', marginBottom: '25px'}}>{overviewData.unreadNotifications}</div>
-                <button className="ghost-button" style={{width: '100%'}}>Check Alerts</button>
-                <div style={{position: 'absolute', top: '-40px', right: '-40px', background: overviewData.unreadNotifications > 0 ? 'rgba(243, 156, 18, 0.4)' : 'var(--primary-glow)', width: '150px', height: '150px', borderRadius: '50%', filter: 'blur(50px)'}}></div>
-              </div>
-            </div>
-          </div>
-        );
+        return <OverviewCards data={overviewData} loading={overviewLoading} setActiveTab={setActiveTab} />;
     }
   };
 
   return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      minHeight: '100vh',
-      paddingTop: '80px', // accounting for fixed header
-      position: 'relative',
-      background: 'var(--background)'
-    }}>
-      {/* Grid Background Effect */}
-      <div className="grid-overlay" style={{position: 'fixed', zIndex: 0}}></div>
+    <div className="dashboard-layout">
+      {/* Grid background — fixed so it doesn't scroll away */}
+      <div className="grid-overlay" style={{ position: 'fixed', zIndex: 0 }} />
 
-      {/* Side Navigation */}
-      <div style={{
-        flex: '0 0 280px',
-        background: 'var(--surface)',
-        borderRight: '1px solid var(--border)',
-        minHeight: 'calc(100vh - 80px)',
-        zIndex: 10,
-        padding: '30px 0',
-        position: 'relative'
-      }}>
-        <div style={{ padding: '0 30px', marginBottom: '30px' }}>
-          <div style={{ color: '#888', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '2px', marginBottom: '10px' }}>LOGGED IN AS</div>
-          <div className="oswald" style={{ fontSize: '1.5rem', color: 'var(--primary)', lineHeight: 1.2 }}>{user.name}</div>
-          <div style={{ color: '#aaa', fontSize: '0.9rem', marginTop: '5px' }}>Role: <span style={{color: '#fff', textTransform: 'capitalize'}}>{user.role}</span></div>
+      {/* ── Sidebar ── */}
+      <aside className="dashboard-sidebar">
+        {/* User info */}
+        <div style={{ padding: '28px 24px 20px', borderBottom: '1px solid var(--border)' }}>
+          <div style={{ color: '#555', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '2px', marginBottom: '8px' }}>
+            Logged in as
+          </div>
+          <div className="oswald" style={{ fontSize: '1.4rem', color: 'var(--primary)', lineHeight: 1.2 }}>
+            {user.name}
+          </div>
+          <div style={{
+            marginTop: '6px', display: 'inline-block',
+            padding: '3px 10px', borderRadius: '12px', fontSize: '0.7rem',
+            textTransform: 'uppercase', letterSpacing: '1px',
+            background: user.role === 'admin' ? 'rgba(231,76,60,0.18)' : user.role === 'technician' ? 'rgba(52,152,219,0.15)' : 'rgba(255,255,255,0.07)',
+            color: user.role === 'admin' ? '#e74c3c' : user.role === 'technician' ? '#3498db' : '#aaa',
+          }}>{user.role}</div>
         </div>
 
-        <ul style={{ listStyle: 'none', padding: 0 }}>
-          {navItems.map(item => (
-            <li key={item.id} onClick={() => setActiveTab(item.id)} style={{
-              padding: '15px 30px',
-              cursor: 'pointer',
-              borderLeft: activeTab === item.id ? '4px solid var(--primary)' : '4px solid transparent',
-              background: activeTab === item.id ? 'rgba(255, 255, 255, 0.05)' : 'transparent',
-              color: activeTab === item.id ? '#fff' : '#888',
-              transition: '0.3s',
-              display: 'flex',
-              alignItems: 'center',
-              fontWeight: activeTab === item.id ? '600' : '400',
-              fontFamily: '"Oswald", sans-serif',
-              letterSpacing: '1px',
-              textTransform: 'uppercase'
-            }} onMouseOver={e=>{if(activeTab!==item.id) {e.target.style.background='rgba(255,255,255,0.02)'; e.target.style.color='#fff';}}} onMouseOut={e=>{if(activeTab!==item.id) {e.target.style.background='transparent'; e.target.style.color='#888';}}}>
-              {item.label}
-            </li>
+        {/* Nav items */}
+        <nav style={{ padding: '12px 0' }}>
+          {navItems.map((item, i) => (
+            <div
+              key={item.id}
+              className={`nav-item${activeTab === item.id ? ' active' : ''}`}
+              onClick={() => setActiveTab(item.id)}
+              style={{ animationDelay: `${i * 40}ms` }}
+            >
+              <span style={{ fontSize: '1rem', width: '20px', textAlign: 'center' }}>{ICONS[item.id]}</span>
+              <span style={{ flex: 1 }}>{item.label}</span>
+              {item.id === 'notifications' && unread > 0 && (
+                <span className="notif-badge">{unread > 99 ? '99+' : unread}</span>
+              )}
+            </div>
           ))}
-        </ul>
-      </div>
+        </nav>
 
-      {/* Main Content Area */}
-      <div style={{
-        flex: 1,
-        minWidth: '300px',
-        padding: '40px 40px',
-        position: 'relative',
-        zIndex: 2,
-        boxSizing: 'border-box'
-      }}>
+        {/* Logout at bottom */}
+        <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border)', marginTop: 'auto' }}>
+          <button className="ghost-button" onClick={onLogout}
+            style={{ width: '100%', padding: '10px', fontSize: '0.85rem', textAlign: 'center' }}>
+            ↩ Logout
+          </button>
+        </div>
+      </aside>
+
+      {/* ── Main Content ── */}
+      <main className="dashboard-main" style={{ position: 'relative', zIndex: 2 }}>
         {renderContent()}
-      </div>
+      </main>
     </div>
   );
 };
+
+/* ── Overview Cards ── */
+const CARDS = [
+  { key: 'vehiclesCount',       label: 'My Vehicles',     tab: 'vehicles',      btn: 'Manage Vehicles',  alertKey: null },
+  { key: 'appointmentsCount',   label: 'Appointments',    tab: 'appointments',  btn: 'View Schedule',    alertKey: null },
+  { key: 'pendingInvoices',     label: 'Pending Invoices',tab: 'invoices',      btn: 'View Invoices',    alertKey: 'pendingInvoices' },
+  { key: 'unreadNotifications', label: 'New Notices',     tab: 'notifications', btn: 'Check Alerts',     alertKey: 'unreadNotifications' },
+];
+
+const OverviewCards = ({ data, loading, setActiveTab }) => (
+  <div style={{ animation: 'fade-in 0.45s ease-out both' }}>
+    <h2 className="oswald" style={{ fontSize: '2.2rem', marginBottom: '28px', color: '#fff', letterSpacing: '1px' }}>
+      At a Glance
+    </h2>
+
+    {loading ? (
+      <div className="loading-container" style={{ marginTop: '60px' }}>
+        <div className="spinner" />
+        <span>Loading your stats…</span>
+      </div>
+    ) : (
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '24px' }}>
+        {CARDS.map(({ key, label, tab, btn, alertKey }) => {
+          const isAlert = alertKey && data[alertKey] > 0;
+          const glowColor = isAlert
+            ? (alertKey === 'pendingInvoices' ? 'rgba(231,76,60,0.35)' : 'rgba(243,156,18,0.35)')
+            : 'var(--primary-glow)';
+          const numColor = isAlert
+            ? (alertKey === 'pendingInvoices' ? '#e74c3c' : '#f39c12')
+            : 'var(--primary)';
+          return (
+            <div
+              key={key}
+              className="hover-card"
+              onClick={() => setActiveTab(tab)}
+              style={{
+                background: 'var(--surface)', border: '1px solid var(--border)',
+                padding: '32px 28px', borderRadius: '6px',
+                position: 'relative', overflow: 'hidden',
+                boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+                cursor: 'pointer',
+              }}
+            >
+              <h3 className="oswald" style={{ fontSize: '1.5rem', marginBottom: '12px', color: '#ccc' }}>{label}</h3>
+              <div style={{ fontSize: '3.5rem', fontWeight: 700, color: numColor, marginBottom: '20px', lineHeight: 1 }}>
+                {data[key]}
+              </div>
+              <button className="ghost-button" style={{ width: '100%', padding: '10px', fontSize: '0.85rem', pointerEvents: 'none' }}>
+                {btn}
+              </button>
+              {/* Glow orb */}
+              <div style={{
+                position: 'absolute', top: '-50px', right: '-50px',
+                background: glowColor, width: '160px', height: '160px',
+                borderRadius: '50%', filter: 'blur(50px)', pointerEvents: 'none',
+              }} />
+            </div>
+          );
+        })}
+      </div>
+    )}
+  </div>
+);
 
 export default Dashboard;

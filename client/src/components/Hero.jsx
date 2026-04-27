@@ -8,12 +8,11 @@ const Hero = ({ onOpenAuth }) => {
         {`
           .hero-container {
             display: flex;
-            min-height: 100vh;
+            min-height: calc(100vh - 70px);
             background-color: var(--bg, #000);
             position: relative;
-            overflow: hidden;
-            padding-top: 8vh;
             align-items: center;
+            padding: 40px 0;
           }
           .hero-content {
             flex: 1;
@@ -24,21 +23,25 @@ const Hero = ({ onOpenAuth }) => {
             justify-content: center;
             align-items: flex-start;
             text-align: left;
+            animation: stagger-in 0.8s ease-out both;
           }
           .hero-image-container {
             flex: 1;
             position: relative;
-            height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
+            padding-right: 4%;
+            animation: fade-in 1s ease-out 0.2s both;
           }
           .hero-image {
             width: 100%;
-            height: 100%;
-            object-fit: cover;
-            mask-image: linear-gradient(to right, transparent 0%, black 25%);
-            -webkit-mask-image: linear-gradient(to right, transparent 0%, black 25%);
+            height: auto;
+            max-height: 80vh;
+            object-fit: contain;
+            filter: drop-shadow(0 0 30px rgba(204, 0, 0, 0.2));
+            mask-image: linear-gradient(to right, transparent 0%, black 15%);
+            -webkit-mask-image: linear-gradient(to right, transparent 0%, black 15%);
           }
           
           .hero-gradient-overlay {
@@ -47,7 +50,7 @@ const Hero = ({ onOpenAuth }) => {
             left: 0;
             width: 100%;
             height: 100%;
-            background: linear-gradient(90deg, #000 0%, rgba(0,0,0,0.6) 20%, transparent 100%);
+            background: linear-gradient(90deg, #000 0%, rgba(0,0,0,0.3) 30%, transparent 100%);
             z-index: 5;
             pointer-events: none;
           }
@@ -55,11 +58,11 @@ const Hero = ({ onOpenAuth }) => {
           .hero-subtitle {
             color: #fff;
             letter-spacing: 2px;
-            margin-bottom: 20px;
-            font-size: 0.9rem;
+            margin-bottom: 24px;
+            font-size: 0.95rem;
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 12px;
             text-transform: uppercase;
             font-weight: 600;
           }
@@ -67,11 +70,11 @@ const Hero = ({ onOpenAuth }) => {
           .hero-title {
             font-family: 'Inter', sans-serif;
             font-weight: 800;
-            font-size: clamp(2.2rem, 3.8vw, 4rem);
-            line-height: 1.15;
-            margin-bottom: 25px;
+            font-size: clamp(2.5rem, 4.5vw, 4.5rem);
+            line-height: 1.1;
+            margin-bottom: 30px;
             color: #ffffff;
-            letter-spacing: -1px;
+            letter-spacing: -1.5px;
             text-shadow: 0 10px 30px rgba(0,0,0,0.5);
           }
 
@@ -80,82 +83,46 @@ const Hero = ({ onOpenAuth }) => {
           }
           
           .hero-title .highlight {
-            color: var(--primary, #CC0000);
-            text-shadow: 0 0 20px var(--primary-glow, rgba(204, 0, 0, 0.4));
+            color: var(--primary);
+            text-shadow: 0 0 25px var(--primary-glow);
+            margin-top: 5px;
           }
 
           .hero-actions {
             display: flex;
             gap: 20px;
             align-items: center;
-            margin-top: 10px;
-          }
-
-          .btn-primary {
-            background: var(--primary, #CC0000);
-            color: #fff;
-            border: none;
-            padding: 16px 45px;
-            font-size: 1.1rem;
-            font-family: 'Inter', sans-serif;
-            font-weight: 700;
-            cursor: pointer;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            transition: all 0.3s ease;
-            box-shadow: 0 8px 25px rgba(204, 0, 0, 0.3);
-            border-radius: 50px;
-          }
-
-          .btn-primary:hover {
-            background: #e60000;
-            transform: translateY(-2px);
-            box-shadow: 0 12px 30px rgba(204, 0, 0, 0.5);
-          }
-
-          .btn-secondary {
-            background: rgba(255, 255, 255, 0.05);
-            color: #fff;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            padding: 15px 30px;
-            font-size: 1rem;
-            font-family: 'Inter', sans-serif;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            border-radius: 3px;
-            backdrop-filter: blur(10px);
-          }
-
-          .btn-secondary:hover {
-            background: rgba(255, 255, 255, 0.1);
-            border-color: rgba(255, 255, 255, 0.4);
-            transform: translateY(-2px);
+            margin-top: 15px;
           }
 
           @media (max-width: 992px) {
             .hero-container {
               flex-direction: column;
-              padding-top: 12vh;
               text-align: center;
+              padding: 60px 0 20px 0;
             }
             
             .hero-content {
               padding: 0 5%;
               align-items: center;
-              margin-bottom: 20px;
+              margin-bottom: 40px;
             }
 
             .hero-subtitle {
               justify-content: center;
             }
 
+            .hero-title {
+               font-size: clamp(2.2rem, 8vw, 3rem);
+            }
+
             .hero-image-container {
               width: 100%;
-              height: 50vh;
+              padding: 0;
             }
 
             .hero-image {
+              max-height: 50vh;
               mask-image: linear-gradient(to top, black 70%, transparent 100%);
               -webkit-mask-image: linear-gradient(to top, black 70%, transparent 100%);
             }
@@ -182,8 +149,11 @@ const Hero = ({ onOpenAuth }) => {
           </h1>
           
           <div className="hero-actions">
-            <button className="btn-primary" onClick={() => onOpenAuth('register')}>
+            <button className="angled-button" onClick={() => onOpenAuth('register')} style={{ fontSize: '1.05rem', padding: '16px 45px' }}>
               Get Started
+            </button>
+            <button className="ghost-button" onClick={() => onOpenAuth('login')} style={{ fontSize: '1.05rem', padding: '15px 40px' }}>
+              Sign In
             </button>
           </div>
         </div>

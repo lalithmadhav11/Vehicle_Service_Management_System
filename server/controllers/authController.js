@@ -8,26 +8,34 @@ export const registerUser = async (req, res, next) => {
   try {
     const { name, email, password, role } = req.body;
 
-    const userExists = await User.findOne({ email });
+    if (!name || !email || !password) {
+      res.status(400);
+      return next(new Error("Please provide name, email and password"));
+    }
 
+    // ✅ FIX: Block self-registration as admin.
+    // Admin accounts can only be created directly in the database.
+    const safeRole = role === "admin" ? "customer" : (role || "customer");
+
+    const userExists = await User.findOne({ email: email.toLowerCase().trim() });
     if (userExists) {
       res.status(400);
-      return next(new Error("User already exists"));
+      return next(new Error("An account with this email already exists"));
     }
 
     const user = await User.create({
-      name,
-      email,
+      name: name.trim(),
+      email: email.toLowerCase().trim(),
       password,
-      role: role || "customer",
+      role: safeRole,
     });
 
     if (user) {
       res.status(201).json({
-        _id: user._id,
-        name: user.name,
+        _id:   user._id,
+        name:  user.name,
         email: user.email,
-        role: user.role,
+        role:  user.role,
         token: generateToken(user._id),
       });
     } else {
@@ -46,14 +54,19 @@ export const loginUser = async (req, res, next) => {
   try {
     const { email, password } = req.body;
 
-    const user = await User.findOne({ email }).select("+password");
+    if (!email || !password) {
+      res.status(400);
+      return next(new Error("Please provide email and password"));
+    }
+
+    const user = await User.findOne({ email: email.toLowerCase().trim() }).select("+password");
 
     if (user && (await user.matchPassword(password))) {
       res.json({
-        _id: user._id,
-        name: user.name,
+        _id:   user._id,
+        name:  user.name,
         email: user.email,
-        role: user.role,
+        role:  user.role,
         token: generateToken(user._id),
       });
     } else {

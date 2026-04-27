@@ -9,6 +9,11 @@ export const createServiceRecord = async (req, res, next) => {
   try {
     const { vehicleId, technicianId, repairDetails, serviceStatus } = req.body;
 
+    if (!vehicleId || !technicianId || !repairDetails) {
+      res.status(400);
+      return next(new Error("vehicleId, technicianId and repairDetails are required"));
+    }
+
     const vehicle = await Vehicle.findById(vehicleId);
     if (!vehicle) {
       res.status(404);
@@ -25,7 +30,7 @@ export const createServiceRecord = async (req, res, next) => {
       vehicleId,
       technicianId,
       repairDetails,
-      serviceStatus: serviceStatus || "Pending"
+      serviceStatus: serviceStatus || "Pending",
     });
 
     res.status(201).json(record);
@@ -40,19 +45,46 @@ export const createServiceRecord = async (req, res, next) => {
 export const getServiceRecords = async (req, res, next) => {
   try {
     let query = {};
-    
-    // Customer can only see their service records
+
     if (req.user.role === "customer") {
-      const vehicles = await Vehicle.find({ userId: req.user._id });
+      const vehicles   = await Vehicle.find({ userId: req.user._id });
       const vehicleIds = vehicles.map(v => v._id);
       query = { vehicleId: { $in: vehicleIds } };
     }
 
     const records = await ServiceRecord.find(query)
       .populate("vehicleId")
-      .populate("technicianId");
+      .populate("technicianId")
+      .sort({ createdAt: -1 });
 
     res.json(records);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Update service record status
+// @route   PUT /api/services/:id
+// @access  Private (Admin, Technician)
+export const updateServiceRecord = async (req, res, next) => {
+  try {
+    const { serviceStatus } = req.body;
+    const validStatuses = ["Pending", "In Progress", "Completed"];
+
+    if (!serviceStatus || !validStatuses.includes(serviceStatus)) {
+      res.status(400);
+      return next(new Error(`serviceStatus must be one of: ${validStatuses.join(", ")}`));
+    }
+
+    const record = await ServiceRecord.findById(req.params.id);
+    if (!record) {
+      res.status(404);
+      return next(new Error("Service record not found"));
+    }
+
+    record.serviceStatus = serviceStatus;
+    const updated = await record.save();
+    res.json(updated);
   } catch (error) {
     next(error);
   }

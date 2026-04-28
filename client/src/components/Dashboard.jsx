@@ -30,12 +30,17 @@ const Dashboard = ({ user, onLogout }) => {
   /* Build nav list based on role */
   const navItems = [
     { id: 'overview',      label: 'Overview' },
-    { id: 'vehicles',      label: 'Vehicles' },
-    { id: 'appointments',  label: 'Appointments' },
-    { id: 'services',      label: 'Service Records' },
-    { id: 'invoices',      label: 'Invoices' },
-    { id: 'notifications', label: 'Notifications' },
   ];
+  // Technicians should not see vehicles or invoices
+  if (user.role !== 'technician') {
+    navItems.push({ id: 'vehicles', label: 'Vehicles' });
+  }
+  navItems.push({ id: 'appointments',  label: 'Appointments' });
+  navItems.push({ id: 'services',      label: 'Service Records' });
+  if (user.role !== 'technician') {
+    navItems.push({ id: 'invoices', label: 'Invoices' });
+  }
+  navItems.push({ id: 'notifications', label: 'Notifications' });
   if (user.role !== 'customer') navItems.push({ id: 'technicians', label: 'Technicians' });
   if (user.role === 'admin')    navItems.push({ id: 'admin',       label: 'Admin Panel' });
 

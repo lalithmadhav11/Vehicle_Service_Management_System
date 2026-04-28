@@ -5,7 +5,7 @@ import {
   updateInvoice,
   approveInvoice,
   rejectInvoice,
-  } from "../controllers/invoiceController.js";
+} from "../controllers/invoiceController.js";
 import { protect } from "../middleware/authMiddleware.js";
 import { authorizeRoles } from "../middleware/roleMiddleware.js";
 
@@ -29,8 +29,5 @@ router
   .route("/:id/reject")
   .put(protect, authorizeRoles("customer"), rejectInvoice);
 
-// Stripe checkout
-router.route("/verify-session").post(protect, verifyCheckoutSession);
-router.route("/:id/create-checkout-session").post(protect, authorizeRoles("customer"), createCheckoutSession);
 
 export default router;

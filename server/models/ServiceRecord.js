@@ -19,7 +19,33 @@ const serviceRecordSchema = new mongoose.Schema(
     },
     repairDetails: {
       type: String,
-      required: [true, "Please provide repair details"],
+      // No longer strictly required upon creation, filled in during/after assessment
+      default: "",
+    },
+    assessmentStatus: {
+      type: String,
+      enum: ["Pending Assessment", "Assessed", "Not Possible", "Invoiced", "Rejected by Customer"],
+      default: "Pending Assessment",
+    },
+    problems: {
+      type: String,
+      default: "",
+    },
+    necessaryItems: [
+      {
+        description: String,
+        amount: Number,
+      }
+    ],
+    optionalItems: [
+      {
+        description: String,
+        amount: Number,
+      }
+    ],
+    repairNotPossibleReason: {
+      type: String,
+      default: "",
     },
     serviceStatus: {
       type: String,

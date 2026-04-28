@@ -1,37 +1,62 @@
 import ServiceRecord from "../models/ServiceRecord.js";
 import Technician from "../models/Technician.js";
 import Vehicle from "../models/Vehicle.js";
+import Appointment from "../models/Appointment.js";
 
-// @desc    Create service record
+// @desc    Create service record from an appointment (Admin only)
 // @route   POST /api/services
-// @access  Private (Admin, Technician)
+// @access  Private (Admin)
 export const createServiceRecord = async (req, res, next) => {
   try {
-    const { vehicleId, technicianId, repairDetails, serviceStatus } = req.body;
+    const { appointmentId, repairDetails } = req.body;
 
-    if (!vehicleId || !technicianId || !repairDetails) {
+    if (!appointmentId || !repairDetails) {
       res.status(400);
-      return next(new Error("vehicleId, technicianId and repairDetails are required"));
+      return next(new Error("appointmentId and repairDetails are required"));
     }
 
-    const vehicle = await Vehicle.findById(vehicleId);
-    if (!vehicle) {
+    // Find the appointment with populated data
+    const appointment = await Appointment.findById(appointmentId)
+      .populate("vehicleId")
+      .populate("technicianId");
+
+    if (!appointment) {
       res.status(404);
-      return next(new Error("Vehicle not found"));
+      return next(new Error("Appointment not found"));
     }
 
-    const technician = await Technician.findById(technicianId);
+    if (!appointment.technicianId) {
+      res.status(400);
+      return next(new Error("Appointment must have a technician assigned first"));
+    }
+
+    // Check if a service record already exists for this appointment
+    const existing = await ServiceRecord.findOne({ appointmentId });
+    if (existing) {
+      res.status(400);
+      return next(new Error("A service record already exists for this appointment"));
+    }
+
+    // Find the Technician profile by userId
+    const technician = await Technician.findOne({ userId: appointment.technicianId });
     if (!technician) {
       res.status(404);
-      return next(new Error("Technician not found"));
+      return next(new Error("Technician profile not found"));
     }
 
     const record = await ServiceRecord.create({
-      vehicleId,
-      technicianId,
+      appointmentId,
+      vehicleId: appointment.vehicleId._id,
+      technicianId: technician._id,
       repairDetails,
-      serviceStatus: serviceStatus || "Pending",
+      serviceStatus: "Pending",
     });
+
+    // Update appointment status to Confirmed if it's still Pending
+    if (appointment.status === "Pending") {
+      appointment.status = "Confirmed";
+      await appointment.save();
+    }
 
     res.status(201).json(record);
   } catch (error) {
@@ -47,14 +72,28 @@ export const getServiceRecords = async (req, res, next) => {
     let query = {};
 
     if (req.user.role === "customer") {
-      const vehicles   = await Vehicle.find({ userId: req.user._id });
+      const vehicles = await Vehicle.find({ userId: req.user._id });
       const vehicleIds = vehicles.map(v => v._id);
       query = { vehicleId: { $in: vehicleIds } };
     }
 
+    // Technician sees only their assigned records
+    if (req.user.role === "technician") {
+      const techProfile = await Technician.findOne({ userId: req.user._id });
+      if (techProfile) {
+        query = { technicianId: techProfile._id };
+      } else {
+        return res.json([]);
+      }
+    }
+
     const records = await ServiceRecord.find(query)
-      .populate("vehicleId")
+      .populate({
+        path: "vehicleId",
+        populate: { path: "userId", select: "name email" },
+      })
       .populate("technicianId")
+      .populate("appointmentId")
       .sort({ createdAt: -1 });
 
     res.json(records);
@@ -82,8 +121,20 @@ export const updateServiceRecord = async (req, res, next) => {
       return next(new Error("Service record not found"));
     }
 
+    // Both technician and admin can mark as Completed
+    // (Admin for problem cases where repair is not possible)
     record.serviceStatus = serviceStatus;
     const updated = await record.save();
+
+    // If marked as Completed, also update the appointment status
+    if (serviceStatus === "Completed" && record.appointmentId) {
+      const appointment = await Appointment.findById(record.appointmentId);
+      if (appointment) {
+        appointment.status = "Completed";
+        await appointment.save();
+      }
+    }
+
     res.json(updated);
   } catch (error) {
     next(error);

@@ -15,6 +15,7 @@ import Invoices from './components/Invoices';
 import Notifications from './components/Notifications';
 import Technicians from './components/Technicians';
 import AdminPanel from './components/AdminPanel';
+import ResetPassword from './components/ResetPassword';
 
 const App = () => {
   const [authOpen, setAuthOpen]   = useState(false);
@@ -84,6 +85,9 @@ const App = () => {
             <Route path="/admin" element={<AdminPanel user={user} />} />
           </Route>
         )}
+
+        {/* Reset Password Route */}
+        <Route path="/reset-password/:token" element={<ResetPassword />} />
 
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/" replace />} />

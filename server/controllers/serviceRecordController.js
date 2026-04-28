@@ -2,6 +2,7 @@ import ServiceRecord from "../models/ServiceRecord.js";
 import Technician from "../models/Technician.js";
 import Vehicle from "../models/Vehicle.js";
 import Appointment from "../models/Appointment.js";
+import { sendDualNotification } from "../utils/notificationService.js";
 
 // @desc    Create service record from an appointment (Admin only)
 // @route   POST /api/services
@@ -107,31 +108,61 @@ export const getServiceRecords = async (req, res, next) => {
 // @access  Private (Admin, Technician)
 export const updateServiceRecord = async (req, res, next) => {
   try {
-    const { serviceStatus } = req.body;
-    const validStatuses = ["Pending", "In Progress", "Completed"];
-
-    if (!serviceStatus || !validStatuses.includes(serviceStatus)) {
-      res.status(400);
-      return next(new Error(`serviceStatus must be one of: ${validStatuses.join(", ")}`));
-    }
-
+    const { 
+      serviceStatus, 
+      assessmentStatus, 
+      problems, 
+      necessaryItems, 
+      optionalItems, 
+      repairNotPossibleReason 
+    } = req.body;
+    
     const record = await ServiceRecord.findById(req.params.id);
     if (!record) {
       res.status(404);
       return next(new Error("Service record not found"));
     }
 
-    // Both technician and admin can mark as Completed
-    // (Admin for problem cases where repair is not possible)
-    record.serviceStatus = serviceStatus;
+    if (serviceStatus) {
+      const validStatuses = ["Pending", "In Progress", "Completed"];
+      if (!validStatuses.includes(serviceStatus)) {
+        res.status(400);
+        return next(new Error(`serviceStatus must be one of: ${validStatuses.join(", ")}`));
+      }
+      record.serviceStatus = serviceStatus;
+    }
+
+    if (assessmentStatus) {
+      const validAssessmentStatuses = ["Pending Assessment", "Assessed", "Not Possible", "Invoiced"];
+      if (!validAssessmentStatuses.includes(assessmentStatus)) {
+        res.status(400);
+        return next(new Error(`assessmentStatus must be one of: ${validAssessmentStatuses.join(", ")}`));
+      }
+      record.assessmentStatus = assessmentStatus;
+    }
+
+    if (problems !== undefined) record.problems = problems;
+    if (necessaryItems !== undefined) record.necessaryItems = necessaryItems;
+    if (optionalItems !== undefined) record.optionalItems = optionalItems;
+    if (repairNotPossibleReason !== undefined) record.repairNotPossibleReason = repairNotPossibleReason;
+
     const updated = await record.save();
 
-    // If marked as Completed, also update the appointment status
+    // If marked as Completed, also update the appointment status and send notification
     if (serviceStatus === "Completed" && record.appointmentId) {
-      const appointment = await Appointment.findById(record.appointmentId);
+      const appointment = await Appointment.findById(record.appointmentId).populate("vehicleId");
       if (appointment) {
         appointment.status = "Completed";
         await appointment.save();
+
+        if (appointment.vehicleId && appointment.vehicleId.userId) {
+          await sendDualNotification(
+            appointment.vehicleId.userId,
+            "Service Completed - Ready for Pickup",
+            `Good news! The service for your vehicle ${appointment.vehicleId.vehicleNumber} has been completed and it is ready for pickup.`,
+            "StatusUpdate"
+          );
+        }
       }
     }
 

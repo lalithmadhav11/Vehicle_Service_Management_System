@@ -4,6 +4,7 @@ import '../App.css';
 const AuthModal = ({ isOpen, tab, setTab, onClose, onLoginSuccess }) => {
   const [loginData, setLoginData]       = useState({ email: '', password: '' });
   const [registerData, setRegisterData] = useState({ name: '', email: '', password: '' });
+  const [forgotData, setForgotData]     = useState({ email: '' });
   const [loading, setLoading]           = useState(false);
   const [errorMsg, setErrorMsg]         = useState('');
   const [successMsg, setSuccessMsg]     = useState('');
@@ -12,6 +13,29 @@ const AuthModal = ({ isOpen, tab, setTab, onClose, onLoginSuccess }) => {
   const reset = () => { setErrorMsg(''); setSuccessMsg(''); };
   const handleLoginChange    = (e) => setLoginData({ ...loginData, [e.target.name]: e.target.value });
   const handleRegisterChange = (e) => setRegisterData({ ...registerData, [e.target.name]: e.target.value });
+  const handleForgotChange   = (e) => setForgotData({ ...forgotData, [e.target.name]: e.target.value });
+
+  const handleForgotSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true); reset();
+    try {
+      const res = await fetch('/api/auth/forgotpassword', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(forgotData),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setSuccessMsg('Reset link sent to your email.');
+      } else {
+        setErrorMsg(data.message || 'Failed to send reset email.');
+      }
+    } catch {
+      setErrorMsg('Cannot connect to server. Make sure the backend is running.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleLoginSubmit = async (e) => {
     e.preventDefault();
@@ -129,7 +153,7 @@ const AuthModal = ({ isOpen, tab, setTab, onClose, onLoginSuccess }) => {
 
           {/* Tabs */}
           <div style={{ display: 'flex', gap: '24px', marginBottom: '28px', borderBottom: '1px solid var(--border)' }}>
-            {['login', 'register'].map((t) => (
+            {['login', 'register', 'forgot'].map((t) => (
               <button key={t} onClick={() => { setTab(t); reset(); }} className="oswald" style={{
                 background: 'transparent', border: 'none',
                 color: tab === t ? 'var(--primary)' : '#555',
@@ -138,7 +162,7 @@ const AuthModal = ({ isOpen, tab, setTab, onClose, onLoginSuccess }) => {
                 cursor: 'pointer', letterSpacing: '1px', transition: '0.2s', fontWeight: 600,
                 textTransform: 'uppercase',
               }}>
-                {t === 'login' ? 'Sign In' : 'Register'}
+                {t === 'login' ? 'Sign In' : t === 'register' ? 'Register' : 'Forgot Password'}
               </button>
             ))}
           </div>
@@ -173,8 +197,15 @@ const AuthModal = ({ isOpen, tab, setTab, onClose, onLoginSuccess }) => {
               }}>
                 {loading ? 'Signing In...' : 'Sign In'}
               </button>
+              
+              <div style={{ textAlign: 'center', marginTop: '10px' }}>
+                <button type="button" onClick={() => setTab('forgot')} style={{
+                  background: 'none', border: 'none', color: '#888', cursor: 'pointer',
+                  fontSize: '0.8rem', textDecoration: 'underline'
+                }}>Forgot your password?</button>
+              </div>
             </form>
-          ) : (
+          ) : tab === 'register' ? (
             /* REGISTER FORM - customers only */
             <form onSubmit={handleRegisterSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div>
@@ -210,7 +241,22 @@ const AuthModal = ({ isOpen, tab, setTab, onClose, onLoginSuccess }) => {
                 {loading ? 'Creating Account...' : 'Create Account'}
               </button>
             </form>
-          )}
+          ) : tab === 'forgot' ? (
+            /* FORGOT PASSWORD FORM */
+            <form onSubmit={handleForgotSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <p style={{ color: '#888', fontSize: '0.9rem', marginBottom: '10px' }}>
+                Enter your email address and we'll send you a link to reset your password.
+              </p>
+              <div>
+                <label style={labelStyle}>Account Email</label>
+                <input type="email" name="email" value={forgotData.email} onChange={handleForgotChange}
+                  className="input-field" placeholder="owner@garage.com" required autoComplete="email" />
+              </div>
+              <button type="submit" disabled={loading} className="angled-button" style={{ marginTop: '10px', opacity: loading ? 0.7 : 1 }}>
+                {loading ? 'Sending...' : 'Send Reset Link'}
+              </button>
+            </form>
+          ) : null}
         </div>
       </div>
     </div>

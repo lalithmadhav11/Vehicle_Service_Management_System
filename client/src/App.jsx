@@ -1,11 +1,20 @@
 import React, { useState, useEffect } from 'react';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import './App.css';
 
 import Header from './components/Header';
 import Hero from './components/Hero';
 import Marquee from './components/Marquee';
 import AuthModal from './components/AuthModal';
-import Dashboard from './components/Dashboard';
+import DashboardLayout from './components/Dashboard';
+import Overview from './components/Overview';
+import Vehicles from './components/Vehicles';
+import Appointments from './components/Appointments';
+import ServiceRecords from './components/ServiceRecords';
+import Invoices from './components/Invoices';
+import Notifications from './components/Notifications';
+import Technicians from './components/Technicians';
+import AdminPanel from './components/AdminPanel';
 
 const App = () => {
   const [authOpen, setAuthOpen]   = useState(false);
@@ -49,15 +58,36 @@ const App = () => {
     <>
       <Header onOpenAuth={openAuth} user={user} onLogout={handleLogout} />
 
-      {!user ? (
-        /* Landing page — add top padding so hero clears the fixed header */
-        <div style={{ paddingTop: '70px' }}>
-          <Hero onOpenAuth={openAuth} />
-          <Marquee />
-        </div>
-      ) : (
-        <Dashboard user={user} onLogout={handleLogout} />
-      )}
+      <Routes>
+        {/* Landing Page */}
+        <Route path="/" element={
+          !user ? (
+            <div style={{ paddingTop: '70px' }}>
+              <Hero onOpenAuth={openAuth} />
+              <Marquee />
+            </div>
+          ) : (
+            <Navigate to="/dashboard" replace />
+          )
+        } />
+
+        {/* Protected Dashboard Routes */}
+        {user && (
+          <Route element={<DashboardLayout user={user} onLogout={handleLogout} />}>
+            <Route path="/dashboard" element={<Overview user={user} />} />
+            <Route path="/vehicles" element={<Vehicles user={user} />} />
+            <Route path="/appointments" element={<Appointments user={user} />} />
+            <Route path="/services" element={<ServiceRecords user={user} />} />
+            <Route path="/invoices" element={<Invoices user={user} />} />
+            <Route path="/notifications" element={<Notifications user={user} />} />
+            <Route path="/technicians" element={<Technicians user={user} />} />
+            <Route path="/admin" element={<AdminPanel user={user} />} />
+          </Route>
+        )}
+
+        {/* Fallback */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
 
       <AuthModal
         isOpen={authOpen}

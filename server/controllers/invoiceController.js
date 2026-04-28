@@ -1,6 +1,8 @@
 import Invoice from "../models/Invoice.js";
 import Vehicle from "../models/Vehicle.js";
 import Appointment from "../models/Appointment.js";
+import ServiceRecord from "../models/ServiceRecord.js";
+import { sendDualNotification } from "../utils/notificationService.js";
 
 // @desc    Create invoice (Admin creates with itemized breakdown)
 // @route   POST /api/invoices
@@ -21,7 +23,10 @@ export const createInvoice = async (req, res, next) => {
     }
 
     // Calculate total from items
-    const totalAmount = items.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    const totalAmount = items.reduce(
+      (sum, item) => sum + Number(item.amount || 0),
+      0,
+    );
 
     const invoice = await Invoice.create({
       vehicleId,
@@ -31,6 +36,24 @@ export const createInvoice = async (req, res, next) => {
       approvalStatus: "Pending Approval",
       paymentStatus: "Pending",
     });
+
+    if (appointmentId) {
+      const record = await ServiceRecord.findOne({ appointmentId });
+      if (record) {
+        record.assessmentStatus = "Invoiced";
+        await record.save();
+      }
+    }
+
+    // Notify customer
+    if (vehicle.userId) {
+      await sendDualNotification(
+        vehicle.userId,
+        "New Invoice Generated",
+        `An invoice for your vehicle ${vehicle.vehicleNumber} has been generated based on the technician's assessment. Please review and approve it to begin the service.`,
+        "General",
+      );
+    }
 
     res.status(201).json(invoice);
   } catch (error) {
@@ -48,7 +71,7 @@ export const getInvoices = async (req, res, next) => {
     // Customer can only see their invoices
     if (req.user.role === "customer") {
       const vehicles = await Vehicle.find({ userId: req.user._id });
-      const vehicleIds = vehicles.map(v => v._id);
+      const vehicleIds = vehicles.map((v) => v._id);
       query = { vehicleId: { $in: vehicleIds } };
     }
 
@@ -76,7 +99,9 @@ export const updateInvoice = async (req, res, next) => {
 
     if (!paymentStatus || !validStatuses.includes(paymentStatus)) {
       res.status(400);
-      return next(new Error(`paymentStatus must be one of: ${validStatuses.join(", ")}`));
+      return next(
+        new Error(`paymentStatus must be one of: ${validStatuses.join(", ")}`),
+      );
     }
 
     const invoice = await Invoice.findById(req.params.id).populate({
@@ -139,13 +164,38 @@ export const approveInvoice = async (req, res, next) => {
 
     if (invoice.approvalStatus !== "Pending Approval") {
       res.status(400);
-      return next(new Error("Invoice has already been " + invoice.approvalStatus.toLowerCase()));
+      return next(
+        new Error(
+          "Invoice has already been " + invoice.approvalStatus.toLowerCase(),
+        ),
+      );
     }
 
     // If customer removed optional items before approving
     if (updatedItems && Array.isArray(updatedItems)) {
       invoice.items = updatedItems;
-      invoice.totalAmount = updatedItems.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+      invoice.totalAmount = updatedItems.reduce(
+        (sum, item) => sum + Number(item.amount || 0),
+        0,
+      );
+
+      // Sync the updated optional items back to the Service Record
+      if (invoice.appointmentId) {
+        const serviceRecord = await ServiceRecord.findOne({
+          appointmentId: invoice.appointmentId,
+        });
+        if (serviceRecord) {
+          // Keep only the optional items that match the ones kept in the invoice
+          serviceRecord.optionalItems = serviceRecord.optionalItems.filter(
+            (opt) =>
+              updatedItems.some(
+                (item) =>
+                  item.description === opt.description && item.isOptional,
+              ),
+          );
+          await serviceRecord.save();
+        }
+      }
     }
 
     invoice.approvalStatus = "Approved";
@@ -180,18 +230,29 @@ export const rejectInvoice = async (req, res, next) => {
 
     if (invoice.approvalStatus !== "Pending Approval") {
       res.status(400);
-      return next(new Error("Invoice has already been " + invoice.approvalStatus.toLowerCase()));
+      return next(
+        new Error(
+          "Invoice has already been " + invoice.approvalStatus.toLowerCase(),
+        ),
+      );
     }
 
     invoice.approvalStatus = "Rejected";
     await invoice.save();
 
-    // Cancel the linked appointment
+    // Cancel the linked appointment and update ServiceRecord
     if (invoice.appointmentId) {
       const appointment = await Appointment.findById(invoice.appointmentId);
       if (appointment) {
         appointment.status = "Cancelled";
         await appointment.save();
+      }
+      const serviceRecord = await ServiceRecord.findOne({
+        appointmentId: invoice.appointmentId,
+      });
+      if (serviceRecord) {
+        serviceRecord.assessmentStatus = "Rejected by Customer";
+        await serviceRecord.save();
       }
     }
 

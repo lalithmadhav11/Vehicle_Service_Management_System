@@ -7,6 +7,11 @@ const appointmentSchema = new mongoose.Schema(
       ref: "Vehicle",
       required: true,
     },
+    technicianId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
     serviceType: {
       type: String,
       required: [true, "Please add service type"],
@@ -17,8 +22,8 @@ const appointmentSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["Booked", "In Progress", "Completed", "Cancelled"],
-      default: "Booked",
+      enum: ["Pending", "Confirmed", "Completed", "Cancelled"],
+      default: "Pending",
     },
   },
   {

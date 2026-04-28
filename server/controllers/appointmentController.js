@@ -1,5 +1,7 @@
 import Appointment from "../models/Appointment.js";
 import Vehicle from "../models/Vehicle.js";
+import User from "../models/User.js";
+import { sendDualNotification } from "../utils/notificationService.js";
 
 // @desc    Book an appointment
 // @route   POST /api/appointments
@@ -26,6 +28,14 @@ export const bookAppointment = async (req, res, next) => {
       serviceType,
       appointmentDate,
     });
+
+    // Notify customer about successful booking
+    await sendDualNotification(
+      vehicle.userId,
+      "Appointment Booked Successfully",
+      `Your appointment for vehicle ${vehicle.vehicleNumber} on ${new Date(appointmentDate).toLocaleDateString()} has been received.`,
+      "General"
+    );
 
     res.status(201).json(appointment);
   } catch (error) {
@@ -82,6 +92,45 @@ export const updateAppointmentStatus = async (req, res, next) => {
     if (!appointment) {
       res.status(404);
       return next(new Error("Appointment not found"));
+    }
+
+    const vehicleDoc = await Vehicle.findById(appointment.vehicleId);
+
+    // Handle technician assignment notifications
+    if (technicianId && !appointment.technicianId) {
+      const techUser = await User.findById(technicianId);
+      
+      // Notify customer
+      if (vehicleDoc && vehicleDoc.userId) {
+        await sendDualNotification(
+          vehicleDoc.userId,
+          "Technician Assigned",
+          `Technician ${techUser?.name || 'assigned'} has been assigned to your vehicle (${vehicleDoc.vehicleNumber}).`,
+          "StatusUpdate"
+        );
+      }
+      
+      // Notify technician
+      await sendDualNotification(
+        technicianId,
+        "New Appointment Assigned",
+        `You have been assigned to service vehicle ${vehicleDoc?.vehicleNumber || 'a vehicle'}.`,
+        "General"
+      );
+    }
+
+    // Check if status is changed to Cancelled
+    if (status && status === "Cancelled" && appointment.status !== "Cancelled") {
+      if (vehicleDoc && vehicleDoc.userId) {
+        // We can pass reason via req.body.reason if admin provided it, otherwise generic message
+        const reason = req.body.reason ? ` Reason: ${req.body.reason}` : "";
+        await sendDualNotification(
+          vehicleDoc.userId,
+          "Appointment Cancelled",
+          `Your appointment for vehicle ${vehicleDoc.vehicleNumber} has been cancelled.${reason}`,
+          "StatusUpdate"
+        );
+      }
     }
 
     if (status) appointment.status = status;

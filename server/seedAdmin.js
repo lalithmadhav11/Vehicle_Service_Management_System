@@ -17,10 +17,14 @@ import Notification from "./models/Notification.js";
 import ServiceRecord from "./models/ServiceRecord.js";
 import Vehicle from "./models/Vehicle.js";
 
-dotenv.config();
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.join(__dirname, ".env") });
 
 const ADMIN_NAME     = "Admin";
-const ADMIN_EMAIL    = "sandeepadmin@gmail.com";
+const ADMIN_EMAIL    = "admin@gmail.com";
 const ADMIN_PASSWORD = "Admin@123";
 
 const seed = async () => {

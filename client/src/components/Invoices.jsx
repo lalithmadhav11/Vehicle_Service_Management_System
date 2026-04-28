@@ -58,7 +58,11 @@ const Invoices = ({ user }) => {
       const invRes  = await fetch(`${API}/invoices`, { headers });
       const invData = await invRes.json();
       if (!invRes.ok) throw new Error(invData.message || 'Failed to fetch invoices');
-      setInvoices(invData || []);
+      const enhancedData = (invData || []).map(inv => ({
+        ...inv,
+        items: inv.items?.map(i => ({ ...i, selected: true })) || []
+      }));
+      setInvoices(enhancedData);
 
       if (user.role === 'admin') {
         // Fetch appointments that have a technician assigned
@@ -128,10 +132,25 @@ const Invoices = ({ user }) => {
     }
   };
 
+  const toggleItem = (invoiceId, itemIdx, isSelected) => {
+    setInvoices(prev => prev.map(inv => {
+      if (inv._id === invoiceId) {
+        const newItems = [...inv.items];
+        newItems[itemIdx] = { ...newItems[itemIdx], selected: isSelected };
+        return { ...inv, items: newItems };
+      }
+      return inv;
+    }));
+  };
+
   const handleApprove = async (id) => {
+    const inv = invoices.find(i => i._id === id);
+    const approvedItems = inv.items.filter(i => i.selected !== false).map(i => ({ description: i.description, amount: i.amount, isOptional: i.isOptional }));
     try {
       const res = await fetch(`${API}/invoices/${id}/approve`, {
-        method: 'PUT', headers,
+        method: 'PUT',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: approvedItems }),
       });
       if (res.ok) {
         setSuccess('Invoice approved! Service will begin.');
@@ -354,7 +373,7 @@ const Invoices = ({ user }) => {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
                 <div>
                   <h3 className="oswald" style={{ fontSize: '1.6rem', marginBottom: '4px' }}>
-                    ₹{inv.totalAmount?.toLocaleString()}
+                    ₹{(inv.approvalStatus === 'Pending Approval' ? inv.items.filter(i => i.selected !== false).reduce((s, i) => s + Number(i.amount || 0), 0) : inv.totalAmount)?.toLocaleString()}
                   </h3>
                   <p style={{ color: '#aaa', fontSize: '0.85rem', margin: 0 }}>
                     {inv.vehicleId?.model} — {inv.vehicleId?.vehicleNumber}
@@ -383,8 +402,17 @@ const Invoices = ({ user }) => {
                       display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                       padding: '6px 0',
                       borderBottom: idx < inv.items.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none',
+                      opacity: item.selected === false ? 0.5 : 1,
                     }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        {user.role === 'customer' && inv.approvalStatus === 'Pending Approval' && item.isOptional && (
+                          <input 
+                            type="checkbox" 
+                            checked={item.selected !== false}
+                            onChange={(e) => toggleItem(inv._id, idx, e.target.checked)}
+                            style={{ accentColor: '#f39c12', cursor: 'pointer', width: '15px', height: '15px' }}
+                          />
+                        )}
                         <span style={{
                           padding: '2px 8px', borderRadius: '3px', fontSize: '0.68rem',
                           fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px',
@@ -393,9 +421,9 @@ const Invoices = ({ user }) => {
                         }}>
                           {item.isOptional ? 'Optional' : 'Necessary'}
                         </span>
-                        <span style={{ color: '#ccc' }}>{item.description}</span>
+                        <span style={{ color: '#ccc', textDecoration: item.selected === false ? 'line-through' : 'none' }}>{item.description}</span>
                       </div>
-                      <span className="oswald" style={{ color: '#fff', fontWeight: 600 }}>₹{item.amount?.toLocaleString()}</span>
+                      <span className="oswald" style={{ color: '#fff', fontWeight: 600, textDecoration: item.selected === false ? 'line-through' : 'none' }}>₹{item.amount?.toLocaleString()}</span>
                     </div>
                   ))}
                   <div style={{
@@ -403,7 +431,9 @@ const Invoices = ({ user }) => {
                     paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.1)',
                   }}>
                     <span style={{ color: '#888', fontWeight: 500 }}>Total</span>
-                    <span className="oswald" style={{ fontSize: '1.1rem', color: 'var(--primary)', fontWeight: 700 }}>₹{inv.totalAmount?.toLocaleString()}</span>
+                    <span className="oswald" style={{ fontSize: '1.1rem', color: 'var(--primary)', fontWeight: 700 }}>
+                      ₹{(inv.approvalStatus === 'Pending Approval' ? inv.items.filter(i => i.selected !== false).reduce((s, i) => s + Number(i.amount || 0), 0) : inv.totalAmount)?.toLocaleString()}
+                    </span>
                   </div>
                 </div>
               )}

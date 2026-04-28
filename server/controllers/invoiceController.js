@@ -119,6 +119,7 @@ export const updateInvoice = async (req, res, next) => {
 // @access  Private (Customer)
 export const approveInvoice = async (req, res, next) => {
   try {
+    const { items: updatedItems } = req.body;
     const invoice = await Invoice.findById(req.params.id).populate({
       path: "vehicleId",
       populate: { path: "userId", select: "_id" },
@@ -139,6 +140,12 @@ export const approveInvoice = async (req, res, next) => {
     if (invoice.approvalStatus !== "Pending Approval") {
       res.status(400);
       return next(new Error("Invoice has already been " + invoice.approvalStatus.toLowerCase()));
+    }
+
+    // If customer removed optional items before approving
+    if (updatedItems && Array.isArray(updatedItems)) {
+      invoice.items = updatedItems;
+      invoice.totalAmount = updatedItems.reduce((sum, item) => sum + Number(item.amount || 0), 0);
     }
 
     invoice.approvalStatus = "Approved";

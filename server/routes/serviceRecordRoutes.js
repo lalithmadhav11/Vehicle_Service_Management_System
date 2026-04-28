@@ -11,7 +11,7 @@ const router = express.Router();
 
 router
   .route("/")
-  .post(protect, authorizeRoles("admin", "technician"), createServiceRecord)
+  .post(protect, authorizeRoles("admin"), createServiceRecord)
   .get(protect, getServiceRecords);
 
 // ✅ NEW: Admin and Technician can update service record status

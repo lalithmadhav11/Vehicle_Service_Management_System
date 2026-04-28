@@ -25,6 +25,7 @@ const StatusBadge = ({ status }) => {
 const Appointments = ({ user }) => {
   const [appointments, setAppointments] = useState([]);
   const [vehicles, setVehicles]         = useState([]);
+  const [technicians, setTechnicians]   = useState([]);
   const [loading, setLoading]           = useState(true);
   const [submitting, setSubmitting]     = useState(false);
   const [showAdd, setShowAdd]           = useState(false);
@@ -54,6 +55,16 @@ const Appointments = ({ user }) => {
             setFormData(prev => ({ ...prev, vehicleId: vehData.vehicles[0]._id }));
         }
       }
+
+      // Admin needs list of technicians to assign appointments
+      if (user.role === 'admin') {
+        const techRes = await fetch(`${API}/technicians`, { headers });
+        if (techRes.ok) {
+          const techData = await techRes.json();
+          setTechnicians(techData || []);
+        }
+      }
+
       setError('');
     } catch (err) {
       setError('Failed to load appointments: ' + err.message);
@@ -106,8 +117,27 @@ const Appointments = ({ user }) => {
     }
   };
 
+  const assignTechnician = async (id, technicianId) => {
+    try {
+      const res = await fetch(`${API}/appointments/${id}`, {
+        method: 'PUT',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ technicianId }),
+      });
+      if (res.ok) {
+        setSuccess('Technician assigned!');
+        fetchData();
+        setTimeout(() => setSuccess(''), 3000);
+      } else {
+        const d = await res.json();
+        setError(d.message);
+      }
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
   const cancelAppointment = async (id) => {
-    if (!window.confirm('Cancel this appointment?')) return;
     await updateStatus(id, 'Cancelled');
   };
 
@@ -170,6 +200,7 @@ const Appointments = ({ user }) => {
           <div style={{ width: '56px', height: '56px', margin: '0 auto 16px', borderRadius: '50%', background: 'rgba(255,255,255,0.04)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem', fontWeight: 700, color: '#555', border: '1px solid rgba(255,255,255,0.08)' }}>A</div>
           <strong style={{ color: '#888' }}>No Appointments Found</strong>
           {user.role === 'customer' && <p>Book your first appointment above.</p>}
+          {user.role === 'technician' && <p>No appointments assigned to you yet.</p>}
         </div>
       ) : (
         <div style={{ overflowX: 'auto', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '6px' }}>
@@ -181,6 +212,7 @@ const Appointments = ({ user }) => {
                 {user.role !== 'customer' && <th>Owner</th>}
                 <th>Service Type</th>
                 <th>Status</th>
+                {user.role === 'admin' && <th>Assigned To</th>}
                 <th>Action</th>
               </tr>
             </thead>
@@ -194,18 +226,35 @@ const Appointments = ({ user }) => {
                   {user.role !== 'customer' && <td>{apt.vehicleId?.userId?.name || 'N/A'}</td>}
                   <td>{apt.serviceType}</td>
                   <td><StatusBadge status={apt.status} /></td>
+                  {user.role === 'admin' && (
+                    <td>
+                      <select
+                        onChange={(e) => assignTechnician(apt._id, e.target.value)}
+                        value={apt.technicianId?._id || ''}
+                        className="input-field"
+                        style={{ padding: '6px 10px', fontSize: '0.82rem', width: 'auto', minWidth: '140px' }}
+                      >
+                        <option value="">— Unassigned —</option>
+                        {technicians.map(t => (
+                          <option key={t._id} value={t.userId}>{t.name}</option>
+                        ))}
+                      </select>
+                    </td>
+                  )}
                   <td>
-                    {user.role !== 'customer' ? (
+                    {user.role === 'admin' ? (
                       <select
                         onChange={(e) => updateStatus(apt._id, e.target.value)}
                         value={apt.status}
                         className="input-field"
                         style={{ padding: '6px 10px', fontSize: '0.82rem', width: 'auto' }}
                       >
-                        {['Pending', 'Confirmed', 'Completed', 'Cancelled'].map(s => (
+                        {['Pending', 'Confirmed', 'Cancelled'].map(s => (
                           <option key={s} value={s}>{s}</option>
                         ))}
                       </select>
+                    ) : user.role === 'technician' ? (
+                      <span style={{ color: '#555', fontSize: '0.8rem' }}>Via Service Records</span>
                     ) : apt.status === 'Pending' ? (
                       <button className="danger-button" onClick={() => cancelAppointment(apt._id)}>
                         Cancel

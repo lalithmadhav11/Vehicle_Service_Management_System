@@ -47,10 +47,17 @@ export const getAppointments = async (req, res, next) => {
       query = { vehicleId: { $in: vehicleIds } };
     }
 
-    const appointments = await Appointment.find(query).populate({
-      path: "vehicleId",
-      populate: { path: "userId", select: "name email" }
-    });
+    // If technician, show only appointments assigned to them
+    if (req.user.role === "technician") {
+      query = { technicianId: req.user._id };
+    }
+
+    const appointments = await Appointment.find(query)
+      .populate({
+        path: "vehicleId",
+        populate: { path: "userId", select: "name email" }
+      })
+      .populate("technicianId", "name email");
 
     res.json(appointments);
   } catch (error) {
@@ -58,16 +65,16 @@ export const getAppointments = async (req, res, next) => {
   }
 };
 
-// @desc    Update appointment status
+// @desc    Update appointment status (and optionally assign technician)
 // @route   PUT /api/appointments/:id
 // @access  Private (Admin, Technician)
 export const updateAppointmentStatus = async (req, res, next) => {
   try {
-    const { status } = req.body;
+    const { status, technicianId } = req.body;
     
-    if(!status) {
+    if(!status && !technicianId) {
        res.status(400);
-       return next(new Error("Status is required"));
+       return next(new Error("Status or technicianId is required"));
     }
 
     const appointment = await Appointment.findById(req.params.id);
@@ -77,8 +84,16 @@ export const updateAppointmentStatus = async (req, res, next) => {
       return next(new Error("Appointment not found"));
     }
 
-    appointment.status = status;
+    if (status) appointment.status = status;
+    if (technicianId) appointment.technicianId = technicianId;
+
     const updatedAppointment = await appointment.save();
+
+    // Re-populate for response
+    await updatedAppointment.populate([
+      { path: "vehicleId", populate: { path: "userId", select: "name email" } },
+      { path: "technicianId", select: "name email" },
+    ]);
 
     res.json(updatedAppointment);
   } catch (error) {

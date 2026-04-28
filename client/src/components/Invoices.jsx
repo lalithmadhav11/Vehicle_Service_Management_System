@@ -10,9 +10,23 @@ const PayBadge = ({ status }) => {
   const map = {
     Paid:      { bg: 'rgba(46,204,113,0.15)', color: '#2ecc71' },
     Pending:   { bg: 'rgba(231,76,60,0.15)',  color: '#e74c3c' },
-    Cancelled: { bg: 'rgba(255,255,255,0.06)', color: '#888' },
+    Failed:    { bg: 'rgba(255,255,255,0.06)', color: '#888' },
   };
-  const s = map[status] || map.Cancelled;
+  const s = map[status] || map.Failed;
+  return (
+    <span style={{ padding: '4px 12px', borderRadius: '20px', fontSize: '0.78rem', fontWeight: 600, background: s.bg, color: s.color }}>
+      {status}
+    </span>
+  );
+};
+
+const ApprovalBadge = ({ status }) => {
+  const map = {
+    'Pending Approval': { bg: 'rgba(243,156,18,0.15)', color: '#f39c12' },
+    'Approved':         { bg: 'rgba(46,204,113,0.15)',  color: '#2ecc71' },
+    'Rejected':         { bg: 'rgba(231,76,60,0.15)',   color: '#e74c3c' },
+  };
+  const s = map[status] || map['Pending Approval'];
   return (
     <span style={{ padding: '4px 12px', borderRadius: '20px', fontSize: '0.78rem', fontWeight: 600, background: s.bg, color: s.color }}>
       {status}
@@ -21,16 +35,20 @@ const PayBadge = ({ status }) => {
 };
 
 const Invoices = ({ user }) => {
-  const [invoices, setInvoices]     = useState([]);
-  const [vehicles, setVehicles]     = useState([]);
-  const [loading, setLoading]       = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError]           = useState('');
-  const [success, setSuccess]       = useState('');
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [searchTerm, setSearchTerm]   = useState('');
+  const [invoices, setInvoices]         = useState([]);
+  const [vehicles, setVehicles]         = useState([]);
+  const [appointments, setAppointments] = useState([]);
+  const [loading, setLoading]           = useState(true);
+  const [submitting, setSubmitting]     = useState(false);
+  const [error, setError]               = useState('');
+  const [success, setSuccess]           = useState('');
+  const [showAddForm, setShowAddForm]   = useState(false);
+  const [searchTerm, setSearchTerm]     = useState('');
   const [filterStatus, setFilterStatus] = useState('All');
-  const [formData, setFormData] = useState({ vehicleId: '', totalAmount: '', paymentStatus: 'Pending' });
+
+  // Form state for itemized invoice
+  const [selectedAptId, setSelectedAptId] = useState('');
+  const [items, setItems] = useState([{ description: '', amount: '', isOptional: false }]);
 
   const headers = { Authorization: `Bearer ${user.token}` };
 
@@ -43,7 +61,21 @@ const Invoices = ({ user }) => {
       setInvoices(invData || []);
 
       if (user.role === 'admin') {
-        const vehRes  = await fetch(`${API}/vehicles`, { headers });
+        // Fetch appointments that have a technician assigned
+        const aptRes = await fetch(`${API}/appointments`, { headers });
+        if (aptRes.ok) {
+          const aptData = await aptRes.json();
+          // Filter: only those without an existing invoice
+          const existingAptIds = (invData || []).map(i => i.appointmentId?._id || i.appointmentId).filter(Boolean).map(String);
+          const available = (aptData || []).filter(a =>
+            a.technicianId &&
+            !existingAptIds.includes(a._id) &&
+            a.status !== 'Cancelled'
+          );
+          setAppointments(available);
+        }
+
+        const vehRes = await fetch(`${API}/vehicles`, { headers });
         if (vehRes.ok) { const vd = await vehRes.json(); setVehicles(vd.vehicles || []); }
       }
     } catch (err) {
@@ -55,23 +87,40 @@ const Invoices = ({ user }) => {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  // Item management
+  const addItem = () => setItems([...items, { description: '', amount: '', isOptional: false }]);
+  const removeItem = (idx) => setItems(items.filter((_, i) => i !== idx));
+  const updateItem = (idx, field, value) => {
+    const updated = [...items];
+    updated[idx] = { ...updated[idx], [field]: field === 'isOptional' ? value : value };
+    setItems(updated);
+  };
+
   const handleAddSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.vehicleId) { setError('Please select a vehicle.'); return; }
+    if (!selectedAptId) { setError('Please select an appointment.'); return; }
+    const validItems = items.filter(i => i.description.trim() && Number(i.amount) > 0);
+    if (validItems.length === 0) { setError('Please add at least one item with description and amount.'); return; }
     setSubmitting(true); setError('');
     try {
-      const res  = await fetch(`${API}/invoices`, {
+      const apt = appointments.find(a => a._id === selectedAptId);
+      const res = await fetch(`${API}/invoices`, {
         method: 'POST',
         headers: { ...headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...formData, totalAmount: Number(formData.totalAmount) }),
+        body: JSON.stringify({
+          vehicleId: apt?.vehicleId?._id || apt?.vehicleId,
+          appointmentId: selectedAptId,
+          items: validItems.map(i => ({ description: i.description, amount: Number(i.amount), isOptional: i.isOptional })),
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Failed to create invoice');
-      setSuccess('Invoice created!');
+      setSuccess('Invoice created and sent to customer for approval!');
       setShowAddForm(false);
-      setFormData({ vehicleId: '', totalAmount: '', paymentStatus: 'Pending' });
+      setSelectedAptId('');
+      setItems([{ description: '', amount: '', isOptional: false }]);
       fetchData();
-      setTimeout(() => setSuccess(''), 3000);
+      setTimeout(() => setSuccess(''), 4000);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -79,9 +128,60 @@ const Invoices = ({ user }) => {
     }
   };
 
+  const handleApprove = async (id) => {
+    try {
+      const res = await fetch(`${API}/invoices/${id}/approve`, {
+        method: 'PUT', headers,
+      });
+      if (res.ok) {
+        setSuccess('Invoice approved! Service will begin.');
+        fetchData();
+        setTimeout(() => setSuccess(''), 3000);
+      } else {
+        const d = await res.json();
+        setError(d.message || 'Failed to approve');
+      }
+    } catch (err) { setError(err.message); }
+  };
+
+  const handleReject = async (id) => {
+    if (!window.confirm('Rejecting this invoice will cancel the appointment. Continue?')) return;
+    try {
+      const res = await fetch(`${API}/invoices/${id}/reject`, {
+        method: 'PUT', headers,
+      });
+      if (res.ok) {
+        setSuccess('Invoice rejected. Appointment cancelled.');
+        fetchData();
+        setTimeout(() => setSuccess(''), 3000);
+      } else {
+        const d = await res.json();
+        setError(d.message || 'Failed to reject');
+      }
+    } catch (err) { setError(err.message); }
+  };
+
+  const handlePay = async (id) => {
+    try {
+      const res = await fetch(`${API}/invoices/${id}`, {
+        method: 'PUT',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paymentStatus: 'Paid' }),
+      });
+      if (res.ok) {
+        setSuccess('Payment successful!');
+        fetchData();
+        setTimeout(() => setSuccess(''), 3000);
+      } else {
+        const d = await res.json();
+        setError(d.message || 'Payment failed');
+      }
+    } catch (err) { setError(err.message); }
+  };
+
   const updatePaymentStatus = async (id, paymentStatus) => {
     try {
-      const res  = await fetch(`${API}/invoices/${id}`, {
+      const res = await fetch(`${API}/invoices/${id}`, {
         method: 'PUT',
         headers: { ...headers, 'Content-Type': 'application/json' },
         body: JSON.stringify({ paymentStatus }),
@@ -90,12 +190,12 @@ const Invoices = ({ user }) => {
         setInvoices(prev => prev.map(inv => inv._id === id ? { ...inv, paymentStatus } : inv));
       } else {
         const d = await res.json();
-        setError(d.message || 'Failed to update invoice');
+        setError(d.message || 'Failed to update');
       }
-    } catch (err) {
-      setError(err.message);
-    }
+    } catch (err) { setError(err.message); }
   };
+
+  const totalOfItems = (itemsArr) => (itemsArr || []).reduce((s, i) => s + (i.amount || 0), 0);
 
   const filtered = invoices.filter(inv => {
     const vn     = inv.vehicleId?.vehicleNumber?.toLowerCase() || '';
@@ -104,6 +204,8 @@ const Invoices = ({ user }) => {
     return (vn.includes(search) || m.includes(search)) &&
            (filterStatus === 'All' || inv.paymentStatus === filterStatus);
   });
+
+  const selectedApt = appointments.find(a => a._id === selectedAptId);
 
   return (
     <div style={{ animation: 'fade-in 0.45s ease-out both' }}>
@@ -119,44 +221,103 @@ const Invoices = ({ user }) => {
       {error   && <div className="alert alert-error">{error}</div>}
       {success && <div className="alert alert-success">{success}</div>}
 
+      {/* ── Admin: Create Itemized Invoice ── */}
       {showAddForm && user.role === 'admin' && (
         <form onSubmit={handleAddSubmit} style={{
           background: 'var(--surface)', padding: '28px', borderRadius: '6px',
           marginBottom: '28px', border: '1px solid var(--border)',
-          display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '18px',
+          display: 'flex', flexDirection: 'column', gap: '18px',
           animation: 'slideUp 0.3s ease-out both',
         }}>
+          {/* Appointment selector */}
           <div>
-            <label style={lbl}>Select Vehicle</label>
-            <select name="vehicleId" value={formData.vehicleId}
-              onChange={e => setFormData({ ...formData, vehicleId: e.target.value })}
+            <label style={lbl}>Select Appointment</label>
+            <select value={selectedAptId} onChange={e => setSelectedAptId(e.target.value)}
               className="input-field" required>
-              <option value="">— Select Vehicle —</option>
-              {vehicles.map(v => <option key={v._id} value={v._id}>{v.vehicleNumber} ({v.model})</option>)}
+              <option value="">— Select Appointment —</option>
+              {appointments.map(a => (
+                <option key={a._id} value={a._id}>
+                  {a.vehicleId?.model} ({a.vehicleId?.vehicleNumber}) — {a.serviceType} — {new Date(a.appointmentDate).toLocaleDateString()}
+                </option>
+              ))}
             </select>
           </div>
+
+          {selectedApt && (
+            <div style={{
+              padding: '14px 16px', borderRadius: '4px',
+              background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border)',
+              fontSize: '0.85rem', color: '#aaa',
+            }}>
+              <strong style={{ color: '#fff' }}>{selectedApt.vehicleId?.model}</strong> — {selectedApt.vehicleId?.vehicleNumber}
+              <span style={{ margin: '0 10px', color: '#444' }}>|</span>
+              Owner: <strong style={{ color: '#fff' }}>{selectedApt.vehicleId?.userId?.name || 'N/A'}</strong>
+            </div>
+          )}
+
+          {/* Itemized cost breakdown */}
           <div>
-            <label style={lbl}>Total Amount (₹)</label>
-            <input type="number" name="totalAmount" value={formData.totalAmount} min="1"
-              onChange={e => setFormData({ ...formData, totalAmount: e.target.value })}
-              className="input-field" placeholder="1500" required />
+            <label style={{ ...lbl, marginBottom: '12px' }}>Cost Breakdown</label>
+            {items.map((item, idx) => (
+              <div key={idx} style={{
+                display: 'grid', gridTemplateColumns: '1fr 120px auto auto',
+                gap: '10px', marginBottom: '10px', alignItems: 'center',
+              }}>
+                <input type="text" placeholder="Description (e.g. Oil Change)" className="input-field"
+                  value={item.description}
+                  onChange={e => updateItem(idx, 'description', e.target.value)} required />
+                <input type="number" placeholder="₹ Amount" className="input-field" min="1"
+                  value={item.amount}
+                  onChange={e => updateItem(idx, 'amount', e.target.value)} required />
+                <label style={{
+                  display: 'flex', alignItems: 'center', gap: '6px',
+                  color: item.isOptional ? '#f39c12' : '#2ecc71',
+                  fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer',
+                  padding: '6px 12px', borderRadius: '4px',
+                  background: item.isOptional ? 'rgba(243,156,18,0.1)' : 'rgba(46,204,113,0.1)',
+                  border: `1px solid ${item.isOptional ? 'rgba(243,156,18,0.3)' : 'rgba(46,204,113,0.3)'}`,
+                  whiteSpace: 'nowrap',
+                }}>
+                  <input type="checkbox" checked={item.isOptional}
+                    onChange={e => updateItem(idx, 'isOptional', e.target.checked)}
+                    style={{ accentColor: '#f39c12' }} />
+                  {item.isOptional ? 'Optional' : 'Necessary'}
+                </label>
+                {items.length > 1 && (
+                  <button type="button" onClick={() => removeItem(idx)}
+                    style={{ background: 'rgba(231,76,60,0.15)', border: '1px solid rgba(231,76,60,0.3)', color: '#e74c3c', borderRadius: '4px', padding: '6px 10px', cursor: 'pointer', fontSize: '0.82rem' }}>
+                    ✕
+                  </button>
+                )}
+              </div>
+            ))}
+            <button type="button" onClick={addItem} className="ghost-button" style={{ fontSize: '0.82rem', padding: '6px 16px', marginTop: '4px' }}>
+              + Add Item
+            </button>
           </div>
-          <div>
-            <label style={lbl}>Payment Status</label>
-            <select name="paymentStatus" value={formData.paymentStatus}
-              onChange={e => setFormData({ ...formData, paymentStatus: e.target.value })}
-              className="input-field">
-              {['Pending', 'Paid', 'Cancelled'].map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
+
+          {/* Total */}
+          <div style={{ textAlign: 'right', padding: '12px 0', borderTop: '1px solid var(--border)' }}>
+            <span style={{ color: '#888', fontSize: '0.85rem', marginRight: '12px' }}>
+              Necessary: ₹{items.filter(i => !i.isOptional).reduce((s, i) => s + Number(i.amount || 0), 0).toLocaleString()}
+            </span>
+            <span style={{ color: '#f39c12', fontSize: '0.85rem', marginRight: '16px' }}>
+              Optional: ₹{items.filter(i => i.isOptional).reduce((s, i) => s + Number(i.amount || 0), 0).toLocaleString()}
+            </span>
+            <span className="oswald" style={{ fontSize: '1.4rem', color: '#fff' }}>
+              Total: ₹{items.reduce((s, i) => s + Number(i.amount || 0), 0).toLocaleString()}
+            </span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-            <button type="submit" disabled={submitting} className="angled-button" style={{ width: '100%' }}>
-              {submitting ? 'Saving…' : 'SAVE INVOICE'}
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <button type="submit" disabled={submitting} className="angled-button" style={{ minWidth: '200px' }}>
+              {submitting ? 'Sending…' : 'SEND INVOICE TO CUSTOMER'}
             </button>
           </div>
         </form>
       )}
 
+      {/* ── Filters ── */}
       {!loading && invoices.length > 0 && (
         <div style={{ display: 'flex', gap: '14px', marginBottom: '24px', flexWrap: 'wrap' }}>
           <input type="text" placeholder="Search by vehicle…" className="input-field"
@@ -165,19 +326,19 @@ const Invoices = ({ user }) => {
           <select className="input-field" style={{ flex: '0 0 160px' }} value={filterStatus}
             onChange={e => setFilterStatus(e.target.value)}>
             <option value="All">All Statuses</option>
-            {['Pending', 'Paid', 'Cancelled'].map(s => <option key={s} value={s}>{s}</option>)}
+            {['Pending', 'Paid'].map(s => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
       )}
 
+      {/* ── Invoice Cards ── */}
       {loading ? <LoadingSpinner label="Loading invoices…" /> : filtered.length === 0 ? (
         <div className="empty-state">
           <div style={{ width: '56px', height: '56px', margin: '0 auto 16px', borderRadius: '50%', background: 'rgba(255,255,255,0.04)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem', fontWeight: 700, color: '#555', border: '1px solid rgba(255,255,255,0.08)' }}>I</div>
           <strong style={{ color: '#888' }}>{invoices.length === 0 ? 'No Invoices Yet' : 'No Results Found'}</strong>
-          {invoices.length === 0 && user.role === 'admin' && <p>Create the first invoice above.</p>}
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(270px, 1fr))', gap: '18px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
           {filtered.map((inv, i) => (
             <div key={inv._id} className="hover-card" style={{
               background: 'var(--surface)', border: '1px solid var(--border)',
@@ -186,28 +347,101 @@ const Invoices = ({ user }) => {
             }}>
               <div style={{
                 position: 'absolute', top: 0, left: 0, width: '4px', height: '100%',
-                background: inv.paymentStatus === 'Paid' ? '#2ecc71' : inv.paymentStatus === 'Cancelled' ? '#888' : 'var(--primary)',
+                background: inv.paymentStatus === 'Paid' ? '#2ecc71' : inv.approvalStatus === 'Rejected' ? '#e74c3c' : 'var(--primary)',
               }} />
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                <h3 className="oswald" style={{ fontSize: '1.6rem' }}>
-                  ₹{inv.totalAmount?.toLocaleString()}
-                </h3>
-                <PayBadge status={inv.paymentStatus} />
+
+              {/* Header */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
+                <div>
+                  <h3 className="oswald" style={{ fontSize: '1.6rem', marginBottom: '4px' }}>
+                    ₹{inv.totalAmount?.toLocaleString()}
+                  </h3>
+                  <p style={{ color: '#aaa', fontSize: '0.85rem', margin: 0 }}>
+                    {inv.vehicleId?.model} — {inv.vehicleId?.vehicleNumber}
+                    {user.role !== 'customer' && inv.vehicleId?.userId?.name && (
+                      <span style={{ color: '#666' }}> | Owner: {inv.vehicleId.userId.name}</span>
+                    )}
+                  </p>
+                </div>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <ApprovalBadge status={inv.approvalStatus} />
+                  {inv.approvalStatus === 'Approved' && <PayBadge status={inv.paymentStatus} />}
+                </div>
               </div>
-              <p style={{ color: '#aaa', fontSize: '0.88rem', marginBottom: '14px' }}>
-                <strong style={{ color: '#777', fontWeight: 500 }}>Vehicle:</strong> {inv.vehicleId?.vehicleNumber || 'Unknown'} — {inv.vehicleId?.model}<br />
-                <strong style={{ color: '#777', fontWeight: 500 }}>Owner:</strong> {inv.vehicleId?.userId?.name || 'Unknown'}
-              </p>
-              <p style={{ color: '#555', fontSize: '0.78rem', marginBottom: '14px' }}>
+
+              {/* Itemized Breakdown */}
+              {inv.items && inv.items.length > 0 && (
+                <div style={{
+                  background: 'rgba(0,0,0,0.2)', borderRadius: '4px',
+                  padding: '14px 16px', marginBottom: '14px',
+                }}>
+                  <div style={{ color: '#666', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '10px' }}>
+                    Cost Breakdown
+                  </div>
+                  {inv.items.map((item, idx) => (
+                    <div key={item._id || idx} style={{
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                      padding: '6px 0',
+                      borderBottom: idx < inv.items.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none',
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{
+                          padding: '2px 8px', borderRadius: '3px', fontSize: '0.68rem',
+                          fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px',
+                          background: item.isOptional ? 'rgba(243,156,18,0.12)' : 'rgba(46,204,113,0.12)',
+                          color: item.isOptional ? '#f39c12' : '#2ecc71',
+                        }}>
+                          {item.isOptional ? 'Optional' : 'Necessary'}
+                        </span>
+                        <span style={{ color: '#ccc' }}>{item.description}</span>
+                      </div>
+                      <span className="oswald" style={{ color: '#fff', fontWeight: 600 }}>₹{item.amount?.toLocaleString()}</span>
+                    </div>
+                  ))}
+                  <div style={{
+                    display: 'flex', justifyContent: 'space-between', marginTop: '10px',
+                    paddingTop: '10px', borderTop: '1px solid rgba(255,255,255,0.1)',
+                  }}>
+                    <span style={{ color: '#888', fontWeight: 500 }}>Total</span>
+                    <span className="oswald" style={{ fontSize: '1.1rem', color: 'var(--primary)', fontWeight: 700 }}>₹{inv.totalAmount?.toLocaleString()}</span>
+                  </div>
+                </div>
+              )}
+
+              <div style={{ fontSize: '0.78rem', color: '#555', marginBottom: '14px' }}>
                 {new Date(inv.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-              </p>
-              {user.role === 'admin' && inv.paymentStatus !== 'Paid' && (
-                <button
-                  className="angled-button"
+              </div>
+
+              {/* ── Customer Actions ── */}
+              {user.role === 'customer' && inv.approvalStatus === 'Pending Approval' && (
+                <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                  <button className="angled-button"
+                    style={{ flex: 1, padding: '10px', fontSize: '0.85rem', background: '#2ecc71', borderColor: '#2ecc71' }}
+                    onClick={() => handleApprove(inv._id)}>
+                    ✓ APPROVE INVOICE
+                  </button>
+                  <button className="danger-button"
+                    style={{ flex: 1, padding: '10px', fontSize: '0.85rem' }}
+                    onClick={() => handleReject(inv._id)}>
+                    ✕ REJECT & CANCEL
+                  </button>
+                </div>
+              )}
+
+              {user.role === 'customer' && inv.approvalStatus === 'Approved' && inv.paymentStatus === 'Pending' && (
+                <button className="angled-button"
+                  style={{ width: '100%', padding: '10px', fontSize: '0.85rem', background: '#2ecc71', borderColor: '#2ecc71' }}
+                  onClick={() => handlePay(inv._id)}>
+                  💳 PAY NOW — ₹{inv.totalAmount?.toLocaleString()}
+                </button>
+              )}
+
+              {/* ── Admin Actions ── */}
+              {user.role === 'admin' && inv.approvalStatus === 'Approved' && inv.paymentStatus !== 'Paid' && (
+                <button className="angled-button"
                   style={{ width: '100%', padding: '9px', fontSize: '0.82rem' }}
-                  onClick={() => updatePaymentStatus(inv._id, inv.paymentStatus === 'Pending' ? 'Paid' : 'Pending')}
-                >
-                  {inv.paymentStatus === 'Pending' ? 'Mark as Paid' : 'Mark as Pending'}
+                  onClick={() => updatePaymentStatus(inv._id, 'Paid')}>
+                  Mark as Paid
                 </button>
               )}
             </div>

@@ -47,6 +47,11 @@ export const getVehicles = async (req, res, next) => {
 
     let query = { ...searchParams };
 
+    // Technicians should not see customer vehicles
+    if (req.user.role === "technician") {
+      return res.json({ vehicles: [], page: 1, pages: 0, total: 0 });
+    }
+
     if (req.user.role === "customer") {
       query.userId = req.user._id;
     }

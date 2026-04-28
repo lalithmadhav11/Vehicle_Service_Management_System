@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import AssessmentForm from './AssessmentForm';
 
 const API = '/api';
 
@@ -18,6 +19,7 @@ const ServiceRecords = ({ user }) => {
   const [showAddForm, setShowAddForm]     = useState(false);
   const [selectedApt, setSelectedApt]     = useState(null);
   const [formData, setFormData]           = useState({ appointmentId: '', repairDetails: '' });
+  const [assessingId, setAssessingId]     = useState(null);
 
   const headers = { Authorization: `Bearer ${user.token}` };
 
@@ -100,6 +102,45 @@ const ServiceRecords = ({ user }) => {
       } else {
         const d = await res.json();
         setError(d.message || 'Update failed');
+      }
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleAssessmentSubmit = async (id, assessmentData) => {
+    try {
+      const res = await fetch(`${API}/services/${id}`, {
+        method: 'PUT',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify(assessmentData),
+      });
+      if (res.ok) {
+        setSuccess('Assessment submitted successfully.');
+        setAssessingId(null);
+        fetchData();
+        setTimeout(() => setSuccess(''), 3000);
+      } else {
+        const d = await res.json();
+        setError(d.message || 'Assessment submission failed');
+      }
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleCancelBooking = async (aptId) => {
+    if (!window.confirm("Are you sure you want to cancel this booking based on the assessment?")) return;
+    try {
+      const res = await fetch(`${API}/appointments/${aptId}`, {
+        method: 'PUT',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'Cancelled', reason: 'Repair not possible as per technician assessment.' }),
+      });
+      if (res.ok) {
+        setSuccess('Booking cancelled and customer notified.');
+        fetchData();
+        setTimeout(() => setSuccess(''), 3000);
       }
     } catch (err) {
       setError(err.message);
@@ -286,6 +327,79 @@ const ServiceRecords = ({ user }) => {
                   )}
                 </div>
               </div>
+              
+              {/* Show Assessment Details for Admin or Customer */}
+              {rec.assessmentStatus && rec.assessmentStatus !== 'Pending Assessment' && (
+                <div style={{ padding: '16px', background: 'rgba(255,255,255,0.03)', borderRadius: '4px', border: '1px solid var(--border)', marginBottom: '12px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                    <span style={{ fontSize: '0.8rem', color: '#888', textTransform: 'uppercase', letterSpacing: '1px' }}>Assessment Status:</span>
+                    <span style={{ padding: '4px 10px', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 'bold', background: (rec.assessmentStatus === 'Not Possible' || rec.assessmentStatus === 'Rejected by Customer') ? 'rgba(255,68,68,0.1)' : 'rgba(46,204,113,0.1)', color: (rec.assessmentStatus === 'Not Possible' || rec.assessmentStatus === 'Rejected by Customer') ? '#ff4444' : '#2ecc71' }}>
+                      {rec.assessmentStatus}
+                    </span>
+                  </div>
+                  
+                  {rec.assessmentStatus === 'Not Possible' ? (
+                    <div>
+                      <strong style={{ color: '#ccc' }}>Reason:</strong>
+                      <p style={{ color: '#aaa', fontSize: '0.9rem', margin: '4px 0 0 0' }}>{rec.repairNotPossibleReason}</p>
+                      {user.role === 'admin' && rec.appointmentId?.status !== 'Cancelled' && (
+                        <button onClick={() => handleCancelBooking(rec.appointmentId?._id)} className="angled-button" style={{ marginTop: '12px', background: '#ff4444', color: '#fff' }}>
+                          CANCEL BOOKING
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <div>
+                      <strong style={{ color: '#ccc' }}>Problems:</strong>
+                      <p style={{ color: '#aaa', fontSize: '0.9rem', margin: '4px 0 12px 0' }}>{rec.problems}</p>
+                      
+                      <div style={{ display: 'flex', gap: '20px' }}>
+                        <div style={{ flex: 1 }}>
+                          <span style={{ color: '#888', fontSize: '0.8rem' }}>Necessary Parts/Labor:</span>
+                          <ul style={{ listStyle: 'none', padding: 0, margin: '4px 0 0 0', color: '#2ecc71', fontSize: '0.85rem' }}>
+                            {rec.necessaryItems?.map((item, idx) => (
+                              <li key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                                <span>{item.description}</span>
+                                <strong>₹{item.amount}</strong>
+                              </li>
+                            ))}
+                            {(!rec.necessaryItems || rec.necessaryItems.length === 0) && <li style={{ color: '#555' }}>None</li>}
+                          </ul>
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <span style={{ color: '#888', fontSize: '0.8rem' }}>Optional Parts/Labor:</span>
+                          <ul style={{ listStyle: 'none', padding: 0, margin: '4px 0 0 0', color: '#f39c12', fontSize: '0.85rem' }}>
+                            {rec.optionalItems?.map((item, idx) => (
+                              <li key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                                <span>{item.description}</span>
+                                <strong>₹{item.amount}</strong>
+                              </li>
+                            ))}
+                            {(!rec.optionalItems || rec.optionalItems.length === 0) && <li style={{ color: '#555' }}>None</li>}
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Assessment Form Toggle for Technician */}
+              {user.role === 'technician' && rec.assessmentStatus === 'Pending Assessment' && !assessingId && (
+                <button onClick={() => setAssessingId(rec._id)} style={{ padding: '8px 16px', background: 'transparent', color: 'var(--primary)', border: '1px solid var(--primary)', borderRadius: '4px', cursor: 'pointer', marginBottom: '12px' }}>
+                  ASSESS VEHICLE
+                </button>
+              )}
+
+              {/* Render Form */}
+              {assessingId === rec._id && (
+                <AssessmentForm 
+                  record={rec} 
+                  onAssessmentSubmit={(data) => handleAssessmentSubmit(rec._id, data)}
+                  onCancel={() => setAssessingId(null)}
+                />
+              )}
+
               <div style={{ color: '#ccc', fontSize: '0.9rem', padding: '12px 16px', background: 'rgba(0,0,0,0.25)', borderRadius: '4px', lineHeight: 1.6 }}>
                 {rec.repairDetails}
               </div>

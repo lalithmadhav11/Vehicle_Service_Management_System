@@ -27,8 +27,8 @@ const Notifications = ({ user, onReadUpdate }) => {
 
   const headers = { Authorization: `Bearer ${user.token}` };
 
-  const fetchNotifications = useCallback(async () => {
-    setLoading(true); setError('');
+  const fetchNotifications = useCallback(async (isPolling = false) => {
+    if (!isPolling) { setLoading(true); setError(''); }
     try {
       const res  = await fetch(`${API}/notifications`, { headers });
       const data = await res.json();
@@ -41,18 +41,24 @@ const Notifications = ({ user, onReadUpdate }) => {
         onReadUpdate(list.filter(n => !n.isRead).length);
       }
 
-      if (user.role === 'admin') {
+      if (user.role === 'admin' && !isPolling) {
         const uRes = await fetch(`${API}/admin/users`, { headers });
         if (uRes.ok) setUsersList(await uRes.json());
       }
     } catch (err) {
-      setError(err.message);
+      if (!isPolling) setError(err.message);
     } finally {
-      setLoading(false);
+      if (!isPolling) setLoading(false);
     }
   }, [user.token, user.role]);
 
-  useEffect(() => { fetchNotifications(); }, [fetchNotifications]);
+  useEffect(() => { 
+    fetchNotifications(false);
+    const intervalId = setInterval(() => {
+      fetchNotifications(true);
+    }, 2000);
+    return () => clearInterval(intervalId);
+  }, [fetchNotifications]);
 
   const markAsRead = async (id) => {
     try {

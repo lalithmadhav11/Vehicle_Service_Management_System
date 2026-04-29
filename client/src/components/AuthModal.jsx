@@ -64,8 +64,9 @@ const AuthModal = ({ isOpen, tab, setTab, onClose, onLoginSuccess }) => {
   const handleRegisterSubmit = async (e) => {
     e.preventDefault();
     setLoading(true); reset();
-    if (registerData.password.length < 6) {
-      setErrorMsg('Password must be at least 6 characters.');
+    const pwdRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+    if (!pwdRegex.test(registerData.password)) {
+      setErrorMsg('Password must be at least 8 characters long, contain uppercase, lowercase, number, and special character.');
       setLoading(false);
       return;
     }
@@ -219,7 +220,7 @@ const AuthModal = ({ isOpen, tab, setTab, onClose, onLoginSuccess }) => {
                   className="input-field" placeholder="john@example.com" required autoComplete="email" />
               </div>
               <div style={{ position: 'relative' }}>
-                <label style={labelStyle}>Create Password <span style={{ color: '#555' }}>(min. 6 chars)</span></label>
+                <label style={labelStyle}>Create Password <span style={{ color: '#555' }}>(min. 8 chars, strong)</span></label>
                 <input type={showPwd ? 'text' : 'password'} name="password"
                   value={registerData.password} onChange={handleRegisterChange}
                   className="input-field" placeholder="••••••••" required autoComplete="new-password"

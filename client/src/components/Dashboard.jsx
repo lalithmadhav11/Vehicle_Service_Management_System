@@ -39,11 +39,17 @@ const DashboardLayout = ({ user, onLogout }) => {
   useEffect(() => {
     if (user.role === 'admin') return;
     
-    // We can fetch unread notifications independently of the current route
-    fetch('/api/notifications', { headers: { Authorization: `Bearer ${user.token}` } })
-      .then(r => r.ok ? r.json() : [])
-      .then(d => setUnread(Array.isArray(d) ? d.filter(n => !n.isRead).length : 0))
-      .catch(() => {});
+    const fetchUnread = () => {
+      fetch('/api/notifications', { headers: { Authorization: `Bearer ${user.token}` } })
+        .then(r => r.ok ? r.json() : [])
+        .then(d => setUnread(Array.isArray(d) ? d.filter(n => !n.isRead).length : 0))
+        .catch(() => {});
+    };
+
+    fetchUnread(); // initial fetch
+    const intervalId = setInterval(fetchUnread, 2000);
+
+    return () => clearInterval(intervalId);
   }, [user, location.pathname]); // re-check on route change
 
   return (

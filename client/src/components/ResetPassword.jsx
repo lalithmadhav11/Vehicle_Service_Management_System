@@ -16,8 +16,9 @@ const ResetPassword = () => {
     if (password !== confirmPassword) {
       return setError('Passwords do not match');
     }
-    if (password.length < 6) {
-      return setError('Password must be at least 6 characters');
+    const pwdRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+    if (!pwdRegex.test(password)) {
+      return setError('Password must be at least 8 chars long, contain uppercase, lowercase, number, and special character');
     }
 
     setLoading(true);

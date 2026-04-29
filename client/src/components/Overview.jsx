@@ -79,7 +79,12 @@ const Overview = ({ user }) => {
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '24px' }}>
-          {CARDS.map(({ key, label, tab, btn, alertKey }) => {
+          {CARDS.filter(card => {
+            if (user.role === 'technician' && (card.key === 'pendingInvoices' || card.key === 'vehiclesCount')) {
+              return false;
+            }
+            return true;
+          }).map(({ key, label, tab, btn, alertKey }) => {
             const isAlert = alertKey && data[alertKey] > 0;
             const glowColor = isAlert
               ? (alertKey === 'pendingInvoices' ? 'rgba(231,76,60,0.35)' : 'rgba(243,156,18,0.35)')

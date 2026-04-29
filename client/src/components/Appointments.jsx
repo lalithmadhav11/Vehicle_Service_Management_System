@@ -79,6 +79,13 @@ const Appointments = ({ user }) => {
     e.preventDefault();
     if (!formData.vehicleId) { setError('Please select a vehicle.'); return; }
     if (!formData.appointmentDate) { setError('Please pick a date & time.'); return; }
+    
+    const selectedDate = new Date(formData.appointmentDate);
+    if (selectedDate < new Date()) {
+      setError('Cannot book appointments in the past.');
+      return;
+    }
+
     setSubmitting(true); setError('');
     try {
       const res = await fetch(`${API}/appointments`, {
@@ -184,7 +191,7 @@ const Appointments = ({ user }) => {
           <div>
             <label style={lbl}>Date &amp; Time</label>
             <input type="datetime-local" className="input-field" value={formData.appointmentDate}
-              min={new Date().toISOString().slice(0, 16)}
+              min={new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)}
               onChange={e => setFormData({ ...formData, appointmentDate: e.target.value })} required />
           </div>
           <div style={{ display: 'flex', alignItems: 'flex-end' }}>

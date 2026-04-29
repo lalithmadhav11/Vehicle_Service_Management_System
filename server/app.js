@@ -2,7 +2,6 @@ import express from "express";
 import cors from "cors";
 import path from "path";
 import { fileURLToPath } from "url";
-
 import authRoutes          from "./routes/authRoutes.js";
 import vehicleRoutes       from "./routes/vehicleRoutes.js";
 import appointmentRoutes   from "./routes/appointmentRoutes.js";

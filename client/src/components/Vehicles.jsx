@@ -52,6 +52,11 @@ const Vehicles = ({ user }) => {
 
   const handleAddSubmit = async (e) => {
     e.preventDefault();
+    const vNum = formData.vehicleNumber.replace(/\s+/g, '').toUpperCase();
+    if (!/^[A-Z]{2}\d{1,2}[A-Z]{1,2}\d{4}$/.test(vNum) && !/^[A-Z0-9]{5,10}$/.test(vNum)) {
+      setError('Invalid Vehicle Number. Format should be like MH12AB1234.');
+      return;
+    }
     setSubmitting(true);
     try {
       const res = await fetch(`${API}/vehicles`, {
@@ -82,7 +87,7 @@ const Vehicles = ({ user }) => {
     }
   };
 
-  const canAdd = user.role === 'customer' || user.role === 'admin';
+  const canAdd = user.role === 'customer';
 
   return (
     <div style={{ animation: 'fade-in 0.45s ease-out both' }}>
